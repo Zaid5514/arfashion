@@ -1,4 +1,95 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
+<style>
+/* Force navbar to display exactly the same on mobile as desktop */
+/* Hide the hamburger toggle button on all screen sizes */
+.navbar-toggle {
+   display: none !important;
+}
+
+/* Force navbar collapse to always be visible and not collapse */
+.navbar-collapse {
+   display: flex !important;
+   height: auto !important;
+   padding-bottom: 0 !important;
+   overflow: visible !important;
+   border-top: 0 !important;
+}
+
+/* Ensure navbar items stay inline on all screen sizes */
+.navbar-collapse.collapse {
+   display: flex !important;
+}
+
+/* Keep navbar-right aligned to the right on all screen sizes */
+.navbar-nav.navbar-right {
+   float: right !important;
+   margin: 0 !important;
+}
+
+/* Prevent navbar items from stacking vertically on mobile */
+@media (max-width: 767px) {
+   .navbar-nav {
+      float: right !important;
+      margin: 0 !important;
+   }
+   
+   .navbar-nav > li {
+      float: left !important;
+      display: inline-block !important;
+   }
+   
+   .navbar-nav > li > a {
+      padding-top: 15px !important;
+      padding-bottom: 15px !important;
+      padding-left: 5px !important;
+      padding-right: 5px !important;
+   }
+   
+   /* Keep dropdowns positioned correctly */
+   .navbar-nav .dropdown-menu {
+      position: absolute !important;
+   }
+   
+   /* Ensure the navbar header and collapse stay on the same line */
+   .navbar-header {
+      float: left !important;
+   }
+   
+   .navbar-collapse {
+      border-top: 0 !important;
+      box-shadow: none !important;
+      width: auto !important;
+      margin: 0 !important;
+   }
+   
+   /* Prevent text from wrapping */
+   .navbar-nav > li > a {
+      white-space: nowrap !important;
+   }
+}
+
+/* Ensure container doesn't force wrapping */
+.navbar > .container {
+   display: flex !important;
+   flex-wrap: nowrap !important;
+   justify-content: space-between !important;
+   align-items: center !important;
+}
+
+/* Ensure navbar-header (logo) stays on extreme left */
+.navbar-header {
+   margin-left: 0 !important;
+   margin-right: auto !important;
+}
+
+/* Ensure navbar-collapse (nav items) stays on extreme right */
+.navbar-collapse {
+   margin-left: auto !important;
+   margin-right: 0 !important;
+   flex-grow: 0 !important;
+   flex-shrink: 0 !important;
+}
+</style>
 <nav class="navbar navbar-default header">
    <div class="container">
       <!-- Brand and toggle get grouped for better mobile display -->

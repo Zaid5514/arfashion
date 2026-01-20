@@ -4,15 +4,24 @@
 	
 	<div class="col-md-12">
 		<div class="panel_s">
-			<div class="panel-body">
+			<div class="panel-body dt-table-custom-invoices-wrapper">
 				<h4><?php echo pur_html_entity_decode($title) ?></h4>
 				<hr class="mtop5">
 				<?php /*
 				<a href="<?php echo site_url('purchase/vendors_portal/add_update_invoice'); ?>" class="btn btn-info"><?php echo _l('add_new'); ?></a>
 				<br><br>
                 */ ?>
-				<table class="table dt-table-custom">
+				<table class="table dt-table-custom dt-table-custom-invoices">
 			       <thead>
+					<tr>
+						<th colspan="3" class="text-right"><?php echo _l('total'); ?></th>
+						<th id="total_invoice_amount"></th>
+						<!--<th id="total_tax_value"></th>-->
+						<th id="total_paid_amount"></th>
+						<th id="total_remaining_amount"></th>
+						<!--<th id="total_total_included_tax"></th>-->
+						<th></th>
+					</tr>
 			       	<th><?php echo _l('invoice_code'); ?></th>
 			       	<th><?php echo _l('invoice_no'); ?></th>
 						<?php /*
@@ -87,17 +96,17 @@
 			         </tr>
 			         <?php } ?>
 			      </tbody>
-					<tfoot>
+					<!-- <tfoot>
 						<tr>
 							<th colspan="3" class="text-right"><?php echo _l('total'); ?></th>
-							<th id="total_invoice_amount"></th>
+							<th id="total_invoice_amount"></th> -->
 							<!--<th id="total_tax_value"></th>-->
-							<th id="total_paid_amount"></th>
-							<th id="total_remaining_amount"></th>
+							<!-- <th id="total_paid_amount"></th> -->
+							<!-- <th id="total_remaining_amount"></th> -->
 							<!--<th id="total_total_included_tax"></th>-->
-							<th></th>
-						</tr>
-					</tfoot>				  
+							<!-- <th></th> -->
+						<!-- </tr> -->
+					<!-- </tfoot>				   -->
 			   </table>	
 			</div>
 		</div>
@@ -149,3 +158,18 @@ jQuery(function () {
     table.draw();
 });
 </script>
+
+<style>
+	.dt-table-custom-invoices {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+}
+
+.dt-table-custom-invoices-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+</style>

@@ -3,10 +3,10 @@
 <div class="row">
 	<div class="col-md-12">
 		<div class="panel_s">
-			<div class="panel-body">
+			<div class="panel-body dt-table-custom-production-wrapper">
 				<h4><?php echo pur_html_entity_decode($title) ?></h4>
 				<hr class="mtop5">
-				<table class="table dt-table-custom table-small scroll-responsive" data-order-type="desc">
+				<table class="table dt-table-custom table-small scroll-responsive dt-table-custom-production" data-order-type="desc">
 					<thead>
 						<tr>
 							<th>Sr No.</th>
@@ -81,3 +81,16 @@ jQuery(function () {
 });
 </script>
 
+<style>
+.dt-table-custom-production {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+}
+
+.dt-table-custom-production-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+</style>
