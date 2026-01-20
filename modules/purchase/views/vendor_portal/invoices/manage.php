@@ -117,7 +117,9 @@
 <script>
 jQuery(function () {
     let table = $('.dt-table-custom').DataTable({
-        paging: false // Disable pagination
+        paging: false, // Disable pagination
+        order: [[0, 'desc']], // Latest invoice code on top
+        orderCellsTop: true
     });
 
     table.on('draw', function () {
