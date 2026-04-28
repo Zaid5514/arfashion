@@ -28,3 +28,6 @@ error_log
 /application/cache/*
 
 /install123/
+
+# Ignore Windows reserved device name
+nul
