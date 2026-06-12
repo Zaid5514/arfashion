@@ -171,6 +171,7 @@ foreach ($statement['result'] as $row) {
         if (!isset($groupedResults[$gid])) {
             $groupedResults[$gid] = $row;
             $groupedResults[$gid]['details_list'] = [];
+            $groupedResults[$gid]['payment_total'] = 0;
         }
 
         // Add each payment detail into details_list
@@ -181,12 +182,7 @@ foreach ($statement['result'] as $row) {
             'payment_mode'  => get_payment_mode_name($row['payment_id']),
         ];
 
-        // Sum payment_total
-        if (isset($groupedResults[$gid]['payment_total'])) {
-            $groupedResults[$gid]['payment_total'] += $row['payment_total'];
-        } else {
-            $groupedResults[$gid]['payment_total'] = $row['payment_total'];
-        }
+        $groupedResults[$gid]['payment_total'] += $row['payment_total'];
 
         // Always keep the last note & date (latest tmp_date)
         if (!isset($groupedResults[$gid]['tmp_date']) || $row['tmp_date'] > $groupedResults[$gid]['tmp_date']) {
