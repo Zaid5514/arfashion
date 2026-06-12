@@ -29,7 +29,7 @@ class Payments extends AdminController
 			show_404();
 		}
 
-		if (staff_cant('create', 'payment')) {
+		if (staff_cant('create', 'payments')) {
 			access_denied('Create Payment');
 		}
 		$totalAdded = $this->payments_model->add_batch_payment($this->input->post());
