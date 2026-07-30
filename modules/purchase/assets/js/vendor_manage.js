@@ -8,7 +8,7 @@
       });
        VendorsServerParams['exclude_inactive'] = '[name="exclude_inactive"]:checked';
 
-	var tAPI = initDataTable('.table-vendors', admin_url+'purchase/table_vendor',[0], [0],VendorsServerParams,  [1, 'desc']);
+	var tAPI = initDataTable('.table-vendors', admin_url+'purchase/table_vendor',[0], [0],VendorsServerParams,  [2, 'asc']);
 	$('input[name="exclude_inactive"]').on('change',function(){
            tAPI.ajax.reload();
        });

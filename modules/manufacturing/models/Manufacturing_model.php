@@ -1484,6 +1484,20 @@ class Manufacturing_model extends App_Model
 	
 
 	/**
+	 * manufacturing order codes that reference a bill of material
+	 * @param  [type] $id 
+	 * @return array      
+	 */
+	public function get_manufacturing_orders_using_bom($id)
+	{
+		$this->db->select('manufacturing_order_code');
+		$this->db->where('bom_id', $id);
+		$manufacturing_orders = $this->db->get(db_prefix() . 'mrp_manufacturing_orders')->result_array();
+
+		return array_column($manufacturing_orders, 'manufacturing_order_code');
+	}
+
+	/**
 	 * delete bill of material
 	 * @param  [type] $id 
 	 * @return [type]     
@@ -1491,6 +1505,12 @@ class Manufacturing_model extends App_Model
 	public function delete_bill_of_material($id)
 	{	
 		$affected_rows = 0;
+
+		/*a bill of material referenced by a manufacturing order must stay, deleting it
+		orphans the order and loses the raw material list*/
+		if (count($this->get_manufacturing_orders_using_bom($id)) > 0) {
+			return false;
+		}
 
 		//delete bill of material details
 		$this->db->where('bill_of_material_id', $id);

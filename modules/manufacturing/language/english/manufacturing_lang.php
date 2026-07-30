@@ -1,6 +1,8 @@
 <?php
 $lang['manufacturing name']              										 = 'Manufacturing';
 $lang['mrp_deleted']              												 = 'Deleted %s ';
+$lang['mrp_bom_in_use_cannot_delete']											 = 'This bill of material cannot be deleted because it is used by manufacturing order(s): %s';
+$lang['mrp_bom_in_use_skipped']													 = '%s bill(s) of material were not deleted because they are used by manufacturing orders';
 $lang['mrp_added_successfully']   												 = 'Added successfully %s';
 $lang['mrp_added_failed'] 														 = 'Added failed';
 $lang['mrp_updated_successfully'] 												 = 'Updated successfully';

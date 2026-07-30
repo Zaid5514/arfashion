@@ -1357,6 +1357,21 @@ class Manufacturing extends AdminController
 			access_denied('routing');
 		}
 
+		$linked_orders = $this->manufacturing_model->get_manufacturing_orders_using_bom($id);
+
+		if (count($linked_orders) > 0) {
+			$message = _l('mrp_bom_in_use_cannot_delete', implode(', ', $linked_orders));
+
+			if ($this->input->is_ajax_request()) {
+				echo json_encode(['success' => false, 'message' => $message]);
+				return;
+			}
+
+			set_alert('warning', $message);
+			redirect(admin_url('manufacturing/bill_of_material_manage'));
+			return;
+		}
+
 		$success = $this->manufacturing_model->delete_bill_of_material($id);
 		
 		// If it's an AJAX request, return JSON response
@@ -2370,6 +2385,7 @@ class Manufacturing extends AdminController
 		}
 
 		$total_deleted = 0;
+		$skipped_in_use = 0;
 
 		if ($this->input->post()) {
 
@@ -2422,16 +2438,28 @@ class Manufacturing extends AdminController
 
 						case 'bill_of_material':
 
-							$this->db->where('bill_of_material_id IN ('.implode(",",$ids) .')');
-							$this->db->delete(db_prefix() . 'mrp_bill_of_material_details');
-							$delete_bom_detail = $this->db->affected_rows();
-							
-							//delete data
-							$this->db->where('id IN ('.implode(",",$ids) .')');
-							$this->db->delete(db_prefix() . 'mrp_bill_of_materials');
-							$delete_bom = $this->db->affected_rows();
-							if ($delete_bom > 0) {
-								$total_deleted += $delete_bom;
+							/*skip any bill of material a manufacturing order still points at*/
+							$deletable_ids = [];
+							foreach ($ids as $id) {
+								if (count($this->manufacturing_model->get_manufacturing_orders_using_bom($id)) > 0) {
+									$skipped_in_use++;
+									continue;
+								}
+								$deletable_ids[] = (int) $id;
+							}
+
+							if (count($deletable_ids) > 0) {
+								$this->db->where('bill_of_material_id IN ('.implode(",",$deletable_ids) .')');
+								$this->db->delete(db_prefix() . 'mrp_bill_of_material_details');
+								$delete_bom_detail = $this->db->affected_rows();
+
+								//delete data
+								$this->db->where('id IN ('.implode(",",$deletable_ids) .')');
+								$this->db->delete(db_prefix() . 'mrp_bill_of_materials');
+								$delete_bom = $this->db->affected_rows();
+								if ($delete_bom > 0) {
+									$total_deleted += $delete_bom;
+								}
 							}
 
 							break;
@@ -2472,6 +2500,9 @@ class Manufacturing extends AdminController
 
 					case 'bill_of_material':
 					set_alert('success', _l('total_bill_of_material'). ": " .$total_deleted);
+					if ($skipped_in_use > 0) {
+						set_alert('warning', _l('mrp_bom_in_use_skipped', $skipped_in_use));
+					}
 					break;
 					
 					case 'manufacturing_order':
