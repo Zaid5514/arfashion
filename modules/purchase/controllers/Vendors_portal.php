@@ -945,7 +945,9 @@ class Vendors_portal extends App_Controller
         }
 
         $data['title'] = _l('pur_invoices');
-        $data['invoices'] = $this->purchase_model->get_invoices_by_vendor(get_vendor_user_id());
+        $vendor_id = get_vendor_user_id();
+        $data['invoices'] = $this->purchase_model->get_invoices_by_vendor($vendor_id);
+        $data['debit_notes'] = $this->purchase_model->get_debit_notes_by_vendor($vendor_id);
 
         $this->data($data);
         $this->view('vendor_portal/invoices/manage');

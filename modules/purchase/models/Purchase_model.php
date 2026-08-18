@@ -7680,7 +7680,39 @@ class Purchase_model extends App_Model
             }
         }
 
+        usort($data_rs, function ($a, $b) {
+            $date_a = strtotime($a['invoice_date'] ?? '1970-01-01');
+            $date_b = strtotime($b['invoice_date'] ?? '1970-01-01');
+            if ($date_a === $date_b) {
+                return (int) $b['id'] - (int) $a['id'];
+            }
+            return $date_b - $date_a;
+        });
+
         return $data_rs;
+    }
+
+    /**
+     * Gets vendor payment notes (debit notes), excluding voided notes.
+     *
+     * @param  int $vendor
+     * @return array
+     */
+    public function get_debit_notes_by_vendor($vendor)
+    {
+        $this->db->where('vendorid', (int) $vendor);
+        $this->db->where('status !=', 3);
+        $this->db->order_by('date', 'DESC');
+        $this->db->order_by('id', 'DESC');
+        $notes = $this->db->get(db_prefix() . 'pur_debit_notes')->result_array();
+
+        foreach ($notes as &$note) {
+            $note['formatted_number'] = format_debit_note_number($note['id']);
+            $note['remaining_debits'] = $this->total_remaining_debits_by_debit_note($note['id']);
+        }
+        unset($note);
+
+        return $notes;
     }
 
     /**
