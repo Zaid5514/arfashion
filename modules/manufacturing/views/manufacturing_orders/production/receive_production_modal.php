@@ -9,7 +9,13 @@
 
     $production_inventory_logs = $this->db->select('*')->from('tblmrp_bom_production_inventory_logs')->where('bom_production_inventory_id', $bom_production_inventory_id)->order_by('id', 'desc')->get()->result_array();
 
-    //var_dump($production_inventory_logs);
+    $manufacturing_order_code = '';
+    if (!empty($production_inventory['manufacturing_order_id'])) {
+        $mo = $this->db->select('manufacturing_order_code')->from(db_prefix() . 'mrp_manufacturing_orders')->where('id', $production_inventory['manufacturing_order_id'])->get()->row();
+        $manufacturing_order_code = $mo ? $mo->manufacturing_order_code : '';
+    }
+
+    $can_make_invoice = has_permission('manufacturing', '', 'view');
 
 ?>
 
@@ -61,13 +67,13 @@
 										<thead class="thead-light">
 											<tr>
 												<th width="5%">#</th>
-												<th width="18%">Date</th>
+												<th width="16%">Date</th>
 												<th width="8%">Received</th>
 												<th width="8%">Lost</th>
 												<th width="8%">Pending</th>
 												<th width="12%">Status</th>
-												<th width="31%">Comment</th>
-												
+												<th width="25%">Comment</th>
+												<th width="18%">Invoice</th>
 											</tr>
 										</thead>
 										<tbody>
@@ -80,7 +86,37 @@
 													<td><?php echo htmlspecialchars($log['qty_pending']); ?></td>
 													<td><?php echo htmlspecialchars(ucfirst(str_replace('_', ' ', $log['status']))); ?></td>
 													<td><?php echo htmlspecialchars($log['comments']); ?></td>
-													
+													<td>
+														<?php if ($can_make_invoice && (float) $log['qty_received'] > 0): ?>
+															<?php
+																$linked_invoice_id = (int) ($log['pur_invoice_id'] ?? 0);
+																if ($linked_invoice_id > 0):
+																	$inv_no = function_exists('get_pur_invoice_number') ? get_pur_invoice_number($linked_invoice_id) : $linked_invoice_id;
+															?>
+																<a target="_blank" href="<?php echo admin_url('purchase/purchase_invoice/' . $linked_invoice_id); ?>">View Invoice<?php echo $inv_no ? ' (' . $inv_no . ')' : ''; ?></a>
+															<?php else:
+																$params = [
+																	'bom_production_inventory_id' => $production_inventory['id'],
+																	'bom_production_inventory_log_ids' => $log['id'],
+																	'manufacturing_order_id' => $production_inventory['manufacturing_order_id'],
+																	'vendor' => $production_inventory['vendor_id'],
+																	'manufacturing_order_code' => $manufacturing_order_code,
+																	'item_name' => $production_inventory['product_name'],
+																	'description' => $production_inventory['comments'],
+																	'qty_assigned' => $production_inventory['qty_assigned'],
+																	'qty_received' => $log['qty_received'],
+																	'qty_lost' => $log['qty_lost'],
+																	'qty_pending' => $production_inventory['qty_pending'],
+																	'price' => $production_inventory['price'],
+																	'deduct_price' => $production_inventory['deduct_price'],
+																];
+															?>
+																<a class="bom-make-invoice-link" href="<?php echo admin_url('purchase/pur_invoice?' . http_build_query($params)); ?>">Make Invoice</a>
+															<?php endif; ?>
+														<?php else: ?>
+															—
+														<?php endif; ?>
+													</td>
 												</tr>
 											<?php endforeach; ?>
 										</tbody>

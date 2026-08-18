@@ -458,3 +458,12 @@ if (!$CI->db->table_exists(db_prefix() . 'mrp_option')) {
 
       ;");
   }
+
+  // Version 1.0.6 — one purchase invoice per receive batch
+  if ($CI->db->table_exists(db_prefix() . 'mrp_bom_production_inventory_logs')
+      && !$CI->db->field_exists('pur_invoice_id', db_prefix() . 'mrp_bom_production_inventory_logs')) {
+    $CI->db->query('ALTER TABLE `' . db_prefix() . "mrp_bom_production_inventory_logs`
+      ADD COLUMN `pur_invoice_id` INT(11) NULL DEFAULT NULL,
+      ADD INDEX `idx_pur_invoice_id` (`pur_invoice_id`)
+    ;");
+  }

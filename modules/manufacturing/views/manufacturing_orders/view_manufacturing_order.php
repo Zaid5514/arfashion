@@ -483,33 +483,18 @@
 																<a href="#" onclick="receive_production_modal(<?php echo $item['id'] ?>); return false;">
 																	<?php echo _l('Receive'); ?>
 																</a> 
-															    <?php //if($item['status'] == 'completed'): ?>
 															    <?php if($item['status'] == 'completed' || $item['status'] == 'in_progress'): ?>
-																|
 																<?php
-                                                                    $invoice_id = $this->db->where('value', $item['id'])->where('fieldid', 3)->where('fieldto', 'pur_invoice')->get('tblcustomfieldsvalues')->row()->relid;
-																	$params = [
-																		'bom_production_inventory_id' => $item['id'],
-																		'vendor' => $item['vendor_id'],
-																		'manufacturing_order_code' => $manufacturing_order->manufacturing_order_code,
-																		'item_name' => $item['product_name'],
-																		'description' => $item['comments'],
-																		'qty_assigned' => $item['qty_assigned'],
-																		'qty_received' => $item['qty_received'],
-																		'qty_lost' => $item['qty_lost'],
-																		'qty_pending' => $item['qty_pending'],
-																		'price' => $item['price'],
-																		'deduct_price' => $item['deduct_price']
-																	];
-																	$url = admin_url('purchase/pur_invoice?' . http_build_query($params));
+																	$has_receive_logs = $this->db->query(
+																		'SELECT COUNT(*) AS c FROM ' . db_prefix() . 'mrp_bom_production_inventory_logs
+																		 WHERE bom_production_inventory_id = ? AND qty_received > 0',
+																		[(int) $item['id']]
+																	)->row()->c;
+																	if ((int) $has_receive_logs > 0) {
+																		echo ' | <a href="#" onclick="production_invoices_modal(' . (int) $item['id'] . '); return false;">Invoices</a>';
+																	}
 																?>
-																    <?php if(!$invoice_id): ?>
-																    	<a target="_blank" href="<?php echo $url; ?>">Make Invoice</a>
-																	<?php else: ?> 
-																		<!-- <a target="_blank" href="<?php echo admin_url('purchase/purchase_invoice/'.$invoice_id); ?>">View Invoice</a> -->
-																		<a target="_blank" href="<?php echo admin_url('purchase/pur_invoice/'.$invoice_id.'?'.http_build_query($params)); ?>">Edit Invoice</a>
-																	<?php endif; ?> 
-																<?php endif; ?> 
+																<?php endif; ?>
 																<?php } ?>
 															    <?php if($item['status'] != 'completed' && $item['qty_received'] <= 0): ?>
 																	|

@@ -5,7 +5,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /*
 Module Name: Manufacturing Management
 Description: This solution supports the entire spectrum of manufacturing styles, from high volume to engineer‐to‐order, and coordinates orders, equipment, facilities, inventory, and work-in-progress to minimize costs and maximize on-time delivery
-Version: 1.0.5
+Version: 1.0.6
 Requires at least: 2.3.*
 Author: GreenTech Solutions
 Author URI: https://codecanyon.net/user/greentech_solutions
@@ -28,6 +28,8 @@ hooks()->add_action('app_admin_footer', 'manufacturing_load_js');
 hooks()->add_action('app_search', 'manufacturing_load_search');
 hooks()->add_action('admin_init', 'manufacturing_module_init_menu_items');
 hooks()->add_action('manufacturing_init',MANUFACTURING_MODULE_NAME.'_appint');
+hooks()->add_action('after_pur_invoice_added', 'manufacturing_link_production_log_to_invoice');
+hooks()->add_action('after_pur_invoice_deleted', 'manufacturing_unlink_production_log_from_invoice');
 //hooks()->add_action('pre_activate_module', MANUFACTURING_MODULE_NAME.'_preactivate');
 //hooks()->add_action('pre_deactivate_module', MANUFACTURING_MODULE_NAME.'_predeactivate');
 // Task related work order
@@ -36,7 +38,92 @@ hooks()->add_filter('relation_values', 'workorder_get_relation_values', 10, 2); 
 hooks()->add_filter('get_relation_data', 'workorder_get_relation_data', 10, 4); // new
 hooks()->add_filter('tasks_table_row_data', 'workorder_add_table_row', 10, 3);
 
-define('VERSION_MANUFACTURING', 1052);
+define('VERSION_MANUFACTURING', 1060);
+
+/**
+ * After a purchase invoice is created, lock receive batch(es) to that invoice.
+ *
+ * @param int          $invoice_id
+ * @param int|int[]|null $log_ids Optional log id(s); falls back to POST / custom field
+ */
+function manufacturing_link_production_log_to_invoice($invoice_id, $log_ids = null)
+{
+	$CI = &get_instance();
+
+	if ($log_ids === null) {
+		$posted_ids = $CI->input->post('bom_production_inventory_log_ids');
+		$posted_id  = $CI->input->post('bom_production_inventory_log_id');
+		if (!empty($posted_ids)) {
+			$log_ids = $posted_ids;
+		} elseif (!empty($posted_id)) {
+			$log_ids = $posted_id;
+		}
+	}
+
+	if (is_string($log_ids)) {
+		$log_ids = preg_split('/\s*,\s*/', $log_ids, -1, PREG_SPLIT_NO_EMPTY);
+	}
+	if (!is_array($log_ids)) {
+		$log_ids = $log_ids ? [(int) $log_ids] : [];
+	}
+	$log_ids = array_values(array_unique(array_filter(array_map('intval', $log_ids))));
+
+	// Fallback: parse "Receive Batch ID(s): ..." from Assigned Information custom field
+	if (empty($log_ids) && (int) $invoice_id > 0) {
+		$cf = $CI->db->where('relid', (int) $invoice_id)
+			->where('fieldto', 'pur_invoice')
+			->where('fieldid', 2)
+			->get(db_prefix() . 'customfieldsvalues')
+			->row();
+		if ($cf && preg_match('/Receive Batch ID(?:s)?:\s*([0-9,\s]+)/i', html_entity_decode(strip_tags($cf->value)), $m)) {
+			$log_ids = array_values(array_unique(array_filter(array_map('intval', preg_split('/\s*,\s*/', $m[1])))));
+		}
+	}
+
+	if (empty($log_ids) || (int) $invoice_id <= 0) {
+		return;
+	}
+
+	$table = db_prefix() . 'mrp_bom_production_inventory_logs';
+	if (!$CI->db->table_exists($table) || !$CI->db->field_exists('pur_invoice_id', $table)) {
+		return;
+	}
+
+	foreach ($log_ids as $log_id) {
+		$log = $CI->db->where('id', $log_id)->get($table)->row();
+		if (!$log || !empty($log->pur_invoice_id)) {
+			continue;
+		}
+
+		$CI->db->where('id', $log_id);
+		$CI->db->where('pur_invoice_id IS NULL', null, false);
+		$CI->db->update($table, [
+			'pur_invoice_id' => (int) $invoice_id,
+			'updated_at'     => date('Y-m-d H:i:s'),
+		]);
+	}
+}
+
+/**
+ * If an invoice is deleted, free the receive batch so it can be invoiced again.
+ *
+ * @param int $invoice_id
+ */
+function manufacturing_unlink_production_log_from_invoice($invoice_id)
+{
+	$CI = &get_instance();
+	$table = db_prefix() . 'mrp_bom_production_inventory_logs';
+
+	if (!$CI->db->table_exists($table) || !$CI->db->field_exists('pur_invoice_id', $table)) {
+		return;
+	}
+
+	$CI->db->where('pur_invoice_id', (int) $invoice_id);
+	$CI->db->update($table, [
+		'pur_invoice_id' => null,
+		'updated_at'     => date('Y-m-d H:i:s'),
+	]);
+}
 
 /**
 * Register activation module hook

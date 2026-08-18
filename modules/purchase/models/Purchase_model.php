@@ -6144,6 +6144,9 @@ class Purchase_model extends App_Model
         unset($data['total_money']);
         unset($data['additional_discount']);
         unset($data['tax_value']);
+        unset($data['bom_production_inventory_log_id']);
+        unset($data['bom_production_inventory_log_ids']);
+        unset($data['manufacturing_order_id']);
 
         $order_detail = [];
         if(isset($data['newitems'])){

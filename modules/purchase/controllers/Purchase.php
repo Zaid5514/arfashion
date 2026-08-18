@@ -4983,10 +4983,53 @@ class purchase extends AdminController
             $data = $this->input->post();
             if($data['id'] == ''){
                 unset($data['id']);
+
+                // Link one or more receive batches to this invoice
+                $log_ids_raw = '';
+                if (!empty($data['bom_production_inventory_log_ids'])) {
+                    $log_ids_raw = $data['bom_production_inventory_log_ids'];
+                } elseif (!empty($data['bom_production_inventory_log_id'])) {
+                    $log_ids_raw = $data['bom_production_inventory_log_id'];
+                }
+                $mo_id = isset($data['manufacturing_order_id']) ? (int) $data['manufacturing_order_id'] : 0;
+                unset($data['bom_production_inventory_log_ids'], $data['bom_production_inventory_log_id'], $data['manufacturing_order_id']);
+
+                $log_ids = [];
+                if ($log_ids_raw !== '' && $log_ids_raw !== null) {
+                    $log_ids = array_values(array_unique(array_filter(array_map('intval', preg_split('/\s*,\s*/', (string) $log_ids_raw)))));
+                }
+
+                if (!empty($log_ids)) {
+                    $log_table = db_prefix() . 'mrp_bom_production_inventory_logs';
+                    if ($this->db->table_exists($log_table) && $this->db->field_exists('pur_invoice_id', $log_table)) {
+                        foreach ($log_ids as $log_id) {
+                            $log = $this->db->where('id', $log_id)->get($log_table)->row();
+                            if (!$log) {
+                                set_alert('warning', 'Receive batch not found for this invoice.');
+                                redirect(admin_url('purchase/invoices'));
+                            }
+                            if (!empty($log->pur_invoice_id)) {
+                                set_alert('warning', 'One or more selected receive batches already have an invoice.');
+                                redirect(admin_url('purchase/purchase_invoice/' . $log->pur_invoice_id));
+                            }
+                        }
+                    }
+                    $_POST['bom_production_inventory_log_ids'] = implode(',', $log_ids);
+                }
+
                 $mess = $this->purchase_model->add_pur_invoice($data);
                 if ($mess) {
                     handle_pur_invoice_file($mess);
+                    if (!empty($log_ids) && function_exists('manufacturing_link_production_log_to_invoice')) {
+                        manufacturing_link_production_log_to_invoice($mess, $log_ids);
+                    }
                     set_alert('success', _l('added_successfully') . ' ' . _l('purchase_invoice'));
+
+                    // Return to MO so invoice status updates immediately
+                    if ($mo_id > 0) {
+                        redirect(admin_url('manufacturing/view_manufacturing_order/' . $mo_id));
+                    }
+                    redirect(admin_url('purchase/purchase_invoice/' . $mess));
 
                 } else {
                     set_alert('warning', _l('add_purchase_invoice_fail'));
@@ -4995,6 +5038,7 @@ class purchase extends AdminController
             }else{
                 $id = $data['id'];
                 unset($data['id']);
+                unset($data['bom_production_inventory_log_ids'], $data['bom_production_inventory_log_id'], $data['manufacturing_order_id']);
                 handle_pur_invoice_file($id);
                 $success = $this->purchase_model->update_pur_invoice($id, $data);
                 if($success){

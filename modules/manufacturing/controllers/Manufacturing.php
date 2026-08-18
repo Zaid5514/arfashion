@@ -2984,6 +2984,12 @@ class Manufacturing extends AdminController
 		$data['bom_production_inventory_id'] = $this->input->post('bom_production_inventory_id');
 		$this->load->view('manufacturing_orders/production/receive_production_modal', $data);
 	}
+
+	public function production_invoices_modal()
+	{
+		$data['bom_production_inventory_id'] = $this->input->post('bom_production_inventory_id');
+		$this->load->view('manufacturing_orders/production/production_invoices_modal', $data);
+	}
 	
 	public function receive_production()
 	{

@@ -26,6 +26,19 @@
                   <input type="hidden" name="additional_discount" value="<?php echo pur_html_entity_decode($additional_discount); ?>">
             	<div class="col-md-6">
             		<?php echo form_hidden('id', (isset($pur_invoice) ? $pur_invoice->id : '') ); ?>
+            		<?php
+            			$bom_log_ids = $this->input->get('bom_production_inventory_log_ids');
+            			if (!$bom_log_ids) {
+            				$bom_log_ids = $this->input->get('bom_production_inventory_log_id');
+            			}
+            			if ($bom_log_ids) {
+            				echo form_hidden('bom_production_inventory_log_ids', $bom_log_ids);
+            			}
+            			$bom_mo_id = $this->input->get('manufacturing_order_id');
+            			if ($bom_mo_id) {
+            				echo form_hidden('manufacturing_order_id', $bom_mo_id);
+            			}
+            		?>
 	            	<div class="col-md-6 pad_left_0">
 	            		<label for="invoice_number"><span class="text-danger">* </span><?php echo _l('invoice_code'); ?></label>
 		            	<?php
@@ -410,6 +423,7 @@ $(document).ready(function () {
 
     // Example values — replace with actual values passed from PHP (use PHP to output JS safely)
     var bom_production_inventory_id = "<?php echo $this->input->get('bom_production_inventory_id'); ?>";
+    var bom_production_inventory_log_ids = "<?php echo $this->input->get('bom_production_inventory_log_ids') ?: $this->input->get('bom_production_inventory_log_id'); ?>";
     var vendor_id = "<?php echo $this->input->get('vendor'); ?>";
     var manufacturing_order_code = "<?php echo $this->input->get('manufacturing_order_code'); ?>";
     var item_name = "<?php echo $this->input->get('item_name'); ?>";
@@ -426,54 +440,44 @@ $(document).ready(function () {
     var assinged_total_price = price * qty_received;
     var lost_total_price = deduct_price * qty_lost;
     var recievable_total_price = assinged_total_price - lost_total_price;
+    var batchCount = bom_production_inventory_log_ids ? bom_production_inventory_log_ids.split(',').filter(Boolean).length : 0;
 
 	$(document).on('focus', 'input[id^="items"][id$="[unit_price]"], #unit_price', function () {
 		$(this).removeAttr('min');
 	});	
 
+    // Editing an existing invoice: do not auto-append newly received batch qty.
+    // New receives create a separate invoice instead.
     if ($('input[name="id"]').val()) {
-        if($('input[name="id"]').val() >= 1316){ //1314
-			let existing_received = 0;
-			$('input[data-quantity]').each(function () {
-				existing_received += parseFloat($(this).val()) || 0;
-			});
-
-			let current_received = qty_received - existing_received;
-			$('input[name="quantity"]').val(current_received);
-			$('textarea[name="item_name"]').val(item_name);
-			$('textarea[name="description"]').val(description);
-		}
-
 		$('input[name="custom_fields[pur_invoice][1]"]').attr('readonly', true);
 		$('input[name="custom_fields[pur_invoice][3]"]').attr('readonly', true);
 		$('textarea[name="custom_fields[pur_invoice][2]"]').attr('readonly', true).attr('rows', 14);
-		// $('textarea[name="item_name"]').val(item_name);
-		// $('textarea[name="description"]').val(description);
-		//$('input[name="quantity"]').val(1);
-		$('input[name="unit_price"]').val(price);	
-		return; // Exit the script if an ID value exists
+		return;
     }
 
     if (!bom_production_inventory_id) {
-        return; // Exit the script if an ID value exists
+        return;
     }	
 
-    // Set values
+    // Set values — qty is for selected receive batch(es)
     $('select[name="vendor"]').val(vendor_id).selectpicker('refresh'); // for selectpicker
     $('input[name="custom_fields[pur_invoice][1]"]').val(manufacturing_order_code).attr('readonly', true);
     $('input[name="custom_fields[pur_invoice][3]"]').val(bom_production_inventory_id).attr('readonly', true);
     $('textarea[name="item_name"]').val(item_name);
     $('textarea[name="description"]').val(description);
-    //$('input[name="quantity"]').val(1);
     $('input[name="quantity"]').val(qty_received);
-    //$('input[name="unit_price"]').val(recievable_total_price);
     $('input[name="unit_price"]').val(price);
 	$('textarea[name="custom_fields[pur_invoice][2]"]').val(
-		"QUANTITY SUMMARY\n" +
+		(batchCount > 1 ? "MERGED BATCH INVOICE\n" : "BATCH INVOICE\n") +
+		"--------------------------\n" +
+		(bom_production_inventory_log_ids ? ("Receive Batch ID" + (batchCount > 1 ? "s" : "") + ": " + bom_production_inventory_log_ids + "\n") : "") +
+		(batchCount > 1 ? ("Batches Merged: " + batchCount + "\n") : "") +
+		"Quantity Received: " + qty_received + "\n" +
+		"Quantity Lost: " + qty_lost + "\n\n" +
+
+		"ASSIGNMENT CONTEXT\n" +
 		"--------------------------\n" +
 		"Total Quantity Assigned: " + qty_assigned + "\n" +
-		"Total Quantity Received: " + qty_received + "\n" +
-		"Total Quantity Lost: " + qty_lost + "\n" +
 		"Total Quantity Pending: " + qty_pending + "\n\n" +
 
 		"PRICE SUMMARY\n" +

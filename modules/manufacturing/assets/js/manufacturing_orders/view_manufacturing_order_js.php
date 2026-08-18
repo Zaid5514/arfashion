@@ -441,6 +441,8 @@
 	function receive_production_modal(bom_production_inventory_id) {
 		"use strict";
 
+		window._bomReceiveProductionId = bom_production_inventory_id;
+
 		$("#modal_wrapper").load("<?php echo admin_url('manufacturing/receive_production_modal'); ?>", {
 			bom_production_inventory_id: bom_production_inventory_id,
 		}, function() {
@@ -450,6 +452,94 @@
 		init_selectpicker();
 		$(".selectpicker").selectpicker('refresh');
 	}
+
+	function production_invoices_modal(bom_production_inventory_id) {
+		"use strict";
+
+		window._bomInvoicesProductionId = bom_production_inventory_id;
+
+		$("#modal_wrapper").load("<?php echo admin_url('manufacturing/production_invoices_modal'); ?>", {
+			bom_production_inventory_id: bom_production_inventory_id,
+		}, function() {
+			$("body").find('#commonModal').modal({ show: true, backdrop: 'static' });
+			bom_update_invoice_selection_summary();
+		});
+	}
+
+	function bom_update_invoice_selection_summary() {
+		var qty = 0;
+		var lost = 0;
+		var count = 0;
+		$('#bom_production_invoices_table .bom-invoice-log-check:checked').each(function () {
+			var $row = $(this).closest('tr');
+			qty += parseFloat($row.data('qty-received')) || 0;
+			lost += parseFloat($row.data('qty-lost')) || 0;
+			count++;
+		});
+		var label = count
+			? ('Selected: ' + count + ' batch' + (count > 1 ? 'es' : '') + ' · Qty ' + qty)
+			: 'No batches selected';
+		$('#bom_invoice_selected_summary').text(label);
+		$('#bom_make_merged_invoice').toggleClass('disabled', count < 1).css('pointer-events', count < 1 ? 'none' : '');
+	}
+
+	$("body").on("change", "#bom_invoice_select_all", function () {
+		var checked = $(this).is(':checked');
+		$('#bom_production_invoices_table .bom-invoice-log-check').prop('checked', checked);
+		bom_update_invoice_selection_summary();
+	});
+
+	$("body").on("change", ".bom-invoice-log-check", function () {
+		var total = $('#bom_production_invoices_table .bom-invoice-log-check').length;
+		var selected = $('#bom_production_invoices_table .bom-invoice-log-check:checked').length;
+		$('#bom_invoice_select_all').prop('checked', total > 0 && total === selected);
+		bom_update_invoice_selection_summary();
+	});
+
+	$("body").on("click", "#bom_make_merged_invoice", function (e) {
+		e.preventDefault();
+		var ids = [];
+		var qty = 0;
+		var lost = 0;
+		$('#bom_production_invoices_table .bom-invoice-log-check:checked').each(function () {
+			ids.push($(this).val());
+			var $row = $(this).closest('tr');
+			qty += parseFloat($row.data('qty-received')) || 0;
+			lost += parseFloat($row.data('qty-lost')) || 0;
+		});
+		if (!ids.length) {
+			alert_float('warning', 'Select at least one uninvoiced batch.');
+			return false;
+		}
+		var baseUrl = $(this).data('base-url');
+		var params = $(this).data('params') || {};
+		params.bom_production_inventory_log_ids = ids.join(',');
+		params.qty_received = qty;
+		params.qty_lost = lost;
+		window.location.href = baseUrl + '?' + $.param(params);
+		return false;
+	});
+
+	// After making an invoice, refresh open invoice/receive modal so status updates
+	$(window).on('focus', function () {
+		if (!window._bomMakeInvoiceOpened) {
+			return;
+		}
+		if (!$('#commonModal').is(':visible')) {
+			window._bomMakeInvoiceOpened = false;
+			return;
+		}
+		window._bomMakeInvoiceOpened = false;
+		if (window._bomInvoicesProductionId) {
+			production_invoices_modal(window._bomInvoicesProductionId);
+		} else if (window._bomReceiveProductionId) {
+			receive_production_modal(window._bomReceiveProductionId);
+		}
+	});
+
+	$("body").on("click", ".bom-make-invoice-link", function () {
+		window._bomMakeInvoiceOpened = true;
+	});
 
 
 	$(document).on('input', '#receive_production input[name="qty_received"], #receive_production input[name="qty_lost"]', function () {
