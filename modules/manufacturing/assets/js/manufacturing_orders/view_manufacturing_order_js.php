@@ -318,22 +318,136 @@
 
 	});
 	
+	function formatMoCancelMoney(amount) {
+		var value = parseFloat(amount);
+		if (isNaN(value)) {
+			return amount;
+		}
+		return value.toFixed(2);
+	}
+
+	function renderMoCancelBlockedInvoices(invoices) {
+		var $tbody = $('#mo_cancel_blocked_table_body');
+		$tbody.empty();
+
+		if (!invoices || !invoices.length) {
+			$tbody.append('<tr><td colspan="5" class="text-muted">No paid invoices found.</td></tr>');
+			return;
+		}
+
+		invoices.forEach(function (invoice) {
+			$tbody.append(
+				'<tr>' +
+					'<td>' + $('<div>').text(invoice.invoice_number || invoice.invoice_id).html() + '</td>' +
+					'<td>' + $('<div>').text(invoice.vendor || '').html() + '</td>' +
+					'<td>' + formatMoCancelMoney(invoice.total) + '</td>' +
+					'<td>' + formatMoCancelMoney(invoice.amount_paid) + '</td>' +
+					'<td>' + formatMoCancelMoney(invoice.left_to_pay) + '</td>' +
+				'</tr>'
+			);
+		});
+	}
+
+	var moCancelRequestInFlight = false;
+	var moProductionInvoiceAction = 'cancel';
+
+	function getMoProductionInvoiceActionUrl() {
+		var id = $("input[name='id']").val();
+
+		if (moProductionInvoiceAction === 'cleanup') {
+			return admin_url + 'manufacturing/mo_cleanup_production_invoices/' + id;
+		}
+
+		return admin_url + 'manufacturing/mo_mark_as_cancel/' + id;
+	}
+
+	function setMoCancelUiBusy(isBusy, confirmPaidInvoices) {
+		var $proceed = $('#mo_cancel_proceed_anyway');
+		var $buttons = $('.mark_as_cancel, .mo_cleanup_production_invoices, #mo_cancel_proceed_anyway, #mo_cancel_go_back');
+
+		$buttons.prop('disabled', isBusy);
+
+		if (isBusy && confirmPaidInvoices) {
+			if (!$proceed.data('original-text')) {
+				$proceed.data('original-text', $proceed.html());
+			}
+			$proceed.html('Processing...');
+			return;
+		}
+
+		if ($proceed.data('original-text')) {
+			$proceed.html($proceed.data('original-text'));
+		}
+	}
+
+	function submitMoProductionInvoiceAction(confirmPaidInvoices) {
+		if (moCancelRequestInFlight) {
+			return;
+		}
+
+		moCancelRequestInFlight = true;
+		setMoCancelUiBusy(true, confirmPaidInvoices);
+
+		$.post(getMoProductionInvoiceActionUrl(), {
+			confirm_paid_invoices: confirmPaidInvoices ? 1 : 0
+		}, function (response) {
+			if (response.action) {
+				moProductionInvoiceAction = response.action;
+			}
+
+			if (response.status === 'warning' && response.blocked_invoices && response.blocked_invoices.length) {
+				moCancelRequestInFlight = false;
+				setMoCancelUiBusy(false, false);
+				renderMoCancelBlockedInvoices(response.blocked_invoices);
+				$('#mo_cancel_blocked_modal').modal('show');
+				return;
+			}
+
+			alert_float(response.status, response.message);
+
+			if (response.status === 'success') {
+				$('#mo_cancel_blocked_modal').modal('hide');
+				location.reload();
+				return;
+			}
+
+			moCancelRequestInFlight = false;
+			setMoCancelUiBusy(false, false);
+		}, 'json').fail(function () {
+			var failMessage = moProductionInvoiceAction === 'cleanup'
+				? 'Unable to clean up production invoices. Please try again.'
+				: 'Unable to cancel manufacturing order. Please try again.';
+			alert_float('danger', failMessage);
+			moCancelRequestInFlight = false;
+			setMoCancelUiBusy(false, false);
+		});
+	}
+
 	$('.mark_as_cancel').on('click', function() {
 		"use strict";
 
-		if (!confirm("Are you sure you want to cancel this?")) {
-			return false; // stop execution if user clicks Cancel
-		}		
+		if (!confirm("Are you sure you want to cancel this manufacturing order?")) {
+			return false;
+		}
 
-		$('.mark_as_cancel').attr( "disabled", "disabled" );
+		moProductionInvoiceAction = 'cancel';
+		submitMoProductionInvoiceAction(false);
+	});
 
-		var id = $("input[name='id']").val();
-		$.get(admin_url + 'manufacturing/mo_mark_as_cancel/' + id, function (response) {
-			alert_float(response.status, response.message);
+	$('.mo_cleanup_production_invoices').on('click', function () {
+		"use strict";
 
-			location.reload();
-		}, 'json');
+		if (!confirm("Clean up unpaid production purchase invoices for this cancelled manufacturing order? Paid invoices will be left untouched.")) {
+			return false;
+		}
 
+		moProductionInvoiceAction = 'cleanup';
+		submitMoProductionInvoiceAction(false);
+	});
+
+	$('#mo_cancel_proceed_anyway').on('click', function () {
+		"use strict";
+		submitMoProductionInvoiceAction(true);
 	});
 	
 	$('.mo_create_purchase_request').on('click', function() {

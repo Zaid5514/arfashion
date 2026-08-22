@@ -4511,27 +4511,379 @@ class Manufacturing_model extends App_Model
 	}
 
 	/**
-	 * mo mark as cancel
-	 * @param  [type] $id 
-	 * @return [type]     
+	 * Linked purchase invoices for an MO's Production tab assignments.
+	 *
+	 * @param  int $mo_id
+	 * @return array
 	 */
-	public function mo_mark_as_cancel($id)
+	private function get_mo_linked_production_invoices($mo_id)
 	{
-		$affected_rows=0;
+		$logs_table = db_prefix() . 'mrp_bom_production_inventory_logs';
+		$assignments_table = db_prefix() . 'mrp_bom_production_inventory';
+		$invoices_table = db_prefix() . 'pur_invoices';
 
-	    //revert MO status to "cancelled"
+		if (!$this->db->table_exists($assignments_table)
+			|| !$this->db->table_exists($logs_table)
+			|| !$this->db->table_exists($invoices_table)) {
+			return [];
+		}
+
+		$this->db->distinct();
+		$this->db->select('pi.id as invoice_id, pi.vendor as vendor_id, pi.total');
+		$this->db->from($assignments_table . ' bpi');
+		$this->db->join($logs_table . ' log', 'log.bom_production_inventory_id = bpi.id', 'inner');
+		$this->db->join($invoices_table . ' pi', 'pi.id = log.pur_invoice_id', 'inner');
+		$this->db->where('bpi.manufacturing_order_id', (int) $mo_id);
+		$this->db->where('log.pur_invoice_id IS NOT NULL', null, false);
+
+		return $this->db->get()->result_array();
+	}
+
+	/**
+	 * Classify a linked purchase invoice as unpaid or having payments applied.
+	 *
+	 * @param  int   $invoice_id
+	 * @param  float $total
+	 * @param  int   $vendor_id
+	 * @return array
+	 */
+	private function classify_mo_production_invoice($invoice_id, $total, $vendor_id = 0)
+	{
+		$this->load->helper('purchase/purchase');
+		$this->load->model('purchase/purchase_model');
+
+		$total = round((float) $total, 2);
+		$left_to_pay = round((float) purinvoice_left_to_pay($invoice_id), 2);
+		$amount_paid = max(0, round($total - $left_to_pay, 2));
+
+		return [
+			'invoice_id'      => (int) $invoice_id,
+			'invoice_number'  => get_pur_invoice_number($invoice_id),
+			'vendor_id'       => (int) $vendor_id,
+			'vendor'          => get_vendor_company_name((int) $vendor_id),
+			'total'           => $total,
+			'amount_paid'     => $amount_paid,
+			'left_to_pay'     => $left_to_pay,
+			'is_unpaid'       => ($left_to_pay >= $total),
+		];
+	}
+
+	/**
+	 * Pre-scan or execute Production tab vendor invoice cleanup when an MO is cancelled.
+	 *
+	 * @param  int  $mo_id
+	 * @param  bool $confirmed  false = read-only scan; true = delete unpaid invoices and cancel assignments
+	 * @return array
+	 */
+	public function handle_production_invoices_on_mo_cancel($mo_id, $confirmed = false)
+	{
+		$result = [
+			'success'             => true,
+			'unpaid_invoices'     => [],
+			'blocked_invoices'    => [],
+			'deleted_invoice_ids' => [],
+			'assignments_updated' => 0,
+			'message'             => '',
+		];
+
+		$linked_invoices = $this->get_mo_linked_production_invoices($mo_id);
+
+		foreach ($linked_invoices as $invoice_row) {
+			$classified = $this->classify_mo_production_invoice(
+				$invoice_row['invoice_id'],
+				$invoice_row['total'],
+				$invoice_row['vendor_id']
+			);
+
+			if ($classified['is_unpaid']) {
+				unset($classified['is_unpaid']);
+				$result['unpaid_invoices'][] = $classified;
+			} else {
+				unset($classified['is_unpaid']);
+				$result['blocked_invoices'][] = $classified;
+			}
+		}
+
+		if (!$confirmed) {
+			return $result;
+		}
+
+		$this->load->model('purchase/purchase_model');
+
+		foreach ($result['unpaid_invoices'] as $invoice) {
+			$deleted = $this->purchase_model->delete_pur_invoice($invoice['invoice_id']);
+
+			if (!$deleted) {
+				$result['success'] = false;
+				$result['message'] = 'Failed to delete purchase invoice ' . $invoice['invoice_number'] . ' (ID: ' . $invoice['invoice_id'] . ').';
+
+				return $result;
+			}
+
+			if (function_exists('manufacturing_unlink_production_log_from_invoice')) {
+				manufacturing_unlink_production_log_from_invoice($invoice['invoice_id']);
+			}
+
+			$result['deleted_invoice_ids'][] = $invoice['invoice_id'];
+
+			log_activity(
+				'MO Cancel: deleted unpaid production purchase invoice'
+				. ' [MO ID: ' . (int) $mo_id
+				. ', Invoice ID: ' . (int) $invoice['invoice_id']
+				. ', Vendor ID: ' . (int) ($invoice['vendor_id'] ?? 0) . ']'
+			);
+		}
+
+		foreach ($result['blocked_invoices'] as $invoice) {
+			log_activity(
+				'MO Cancel: left paid production purchase invoice untouched'
+				. ' [MO ID: ' . (int) $mo_id
+				. ', Invoice ID: ' . (int) $invoice['invoice_id']
+				. ', Vendor ID: ' . (int) ($invoice['vendor_id'] ?? 0)
+				. ', Paid: ' . (float) $invoice['amount_paid']
+				. ', Left: ' . (float) $invoice['left_to_pay'] . ']'
+			);
+		}
+
+		$assignments_table = db_prefix() . 'mrp_bom_production_inventory';
+		if ($this->db->table_exists($assignments_table)) {
+			$update_data = ['status' => 'cancelled'];
+			if ($this->db->field_exists('updated_at', $assignments_table)) {
+				$update_data['updated_at'] = date('Y-m-d H:i:s');
+			}
+
+			$this->db->where('manufacturing_order_id', (int) $mo_id);
+			$this->db->update($assignments_table, $update_data);
+			$result['assignments_updated'] = $this->db->affected_rows();
+		}
+
+		log_activity(
+			'MO Cancel: marked production assignment row(s) as cancelled'
+			. ' [MO ID: ' . (int) $mo_id
+			. ', Rows: ' . (int) $result['assignments_updated'] . ']'
+		);
+
+		return $result;
+	}
+
+	/**
+	 * mo mark as cancel
+	 * @param  int $id
+	 * @param  int $confirm_paid_invoices
+	 * @return array
+	 */
+	public function mo_mark_as_cancel($id, $confirm_paid_invoices = 0)
+	{
+		$mo = $this->get_manufacturing_order($id);
+		if (!empty($mo['manufacturing_order']) && $mo['manufacturing_order']->status === 'cancelled') {
+			return [
+				'success'               => true,
+				'requires_confirmation' => false,
+				'already_cancelled'     => true,
+				'deleted_invoice_ids'   => [],
+				'blocked_invoices'      => [],
+				'assignments_updated'   => 0,
+			];
+		}
+
+		$this->db->trans_start();
+
+		$prescan = $this->handle_production_invoices_on_mo_cancel($id, false);
+
+		if (!$prescan['success']) {
+			$this->db->trans_complete();
+
+			return [
+				'success'               => false,
+				'requires_confirmation' => false,
+				'message'               => $prescan['message'] ?: 'Failed to scan production invoices.',
+			];
+		}
+
+		if (!empty($prescan['blocked_invoices']) && !(int) $confirm_paid_invoices) {
+			$this->db->trans_complete();
+
+			return [
+				'success'               => false,
+				'requires_confirmation' => true,
+				'blocked_invoices'      => $prescan['blocked_invoices'],
+				'unpaid_invoices'       => $prescan['unpaid_invoices'],
+			];
+		}
+
 		$update_mo_status = $this->update_manufacturing_order_status($id, [
 			'status' => 'cancelled',
 		]);
 
-		if($update_mo_status){
-			$affected_rows++;
+		if (!$update_mo_status) {
+			$this->db->trans_rollback();
+			$this->db->trans_complete();
+
+			return [
+				'success'               => false,
+				'requires_confirmation' => false,
+				'message'               => 'Failed to update manufacturing order status.',
+			];
 		}
 
-		if($affected_rows > 0){
+		$execute = $this->handle_production_invoices_on_mo_cancel($id, true);
+
+		if (!$execute['success']) {
+			$this->db->trans_rollback();
+			$this->db->trans_complete();
+
+			return [
+				'success'               => false,
+				'requires_confirmation' => false,
+				'message'               => $execute['message'] ?: 'Failed to clean up production invoices.',
+			];
+		}
+
+		$this->db->trans_complete();
+
+		if ($this->db->trans_status() === false) {
+			return [
+				'success'               => false,
+				'requires_confirmation' => false,
+				'message'               => 'Transaction failed while cancelling manufacturing order.',
+			];
+		}
+
+		return [
+			'success'               => true,
+			'requires_confirmation' => false,
+			'deleted_invoice_ids'   => $execute['deleted_invoice_ids'],
+			'blocked_invoices'      => $execute['blocked_invoices'],
+			'assignments_updated'   => $execute['assignments_updated'],
+		];
+	}
+
+	/**
+	 * Whether a cancelled MO still has production invoices or assignments to clean up.
+	 *
+	 * @param  int $mo_id
+	 * @return bool
+	 */
+	public function mo_has_pending_production_invoice_cleanup($mo_id)
+	{
+		$prescan = $this->handle_production_invoices_on_mo_cancel($mo_id, false);
+
+		if (!empty($prescan['unpaid_invoices']) || !empty($prescan['blocked_invoices'])) {
 			return true;
 		}
-		return false;
+
+		$assignments_table = db_prefix() . 'mrp_bom_production_inventory';
+		if (!$this->db->table_exists($assignments_table)) {
+			return false;
+		}
+
+		$this->db->where('manufacturing_order_id', (int) $mo_id);
+		$this->db->where('status !=', 'cancelled');
+
+		return $this->db->count_all_results($assignments_table) > 0;
+	}
+
+	/**
+	 * Retroactive production invoice cleanup for MOs already in cancelled status.
+	 *
+	 * @param  int $id
+	 * @param  int $confirm_paid_invoices
+	 * @return array
+	 */
+	public function cleanup_production_invoices_for_cancelled_mo($id, $confirm_paid_invoices = 0)
+	{
+		$mo = $this->get_manufacturing_order($id);
+
+		if (empty($mo['manufacturing_order'])) {
+			return [
+				'success'               => false,
+				'requires_confirmation' => false,
+				'message'               => 'Manufacturing order not found.',
+			];
+		}
+
+		if ($mo['manufacturing_order']->status !== 'cancelled') {
+			return [
+				'success'               => false,
+				'requires_confirmation' => false,
+				'message'               => 'Production invoice cleanup is only available for cancelled manufacturing orders.',
+			];
+		}
+
+		if (!$this->mo_has_pending_production_invoice_cleanup($id)) {
+			return [
+				'success'               => true,
+				'requires_confirmation' => false,
+				'nothing_to_cleanup'    => true,
+				'deleted_invoice_ids'   => [],
+				'blocked_invoices'      => [],
+				'assignments_updated'   => 0,
+			];
+		}
+
+		$this->db->trans_start();
+
+		$prescan = $this->handle_production_invoices_on_mo_cancel($id, false);
+
+		if (!$prescan['success']) {
+			$this->db->trans_complete();
+
+			return [
+				'success'               => false,
+				'requires_confirmation' => false,
+				'message'               => $prescan['message'] ?: 'Failed to scan production invoices.',
+			];
+		}
+
+		if (!empty($prescan['blocked_invoices']) && !(int) $confirm_paid_invoices) {
+			$this->db->trans_complete();
+
+			return [
+				'success'               => false,
+				'requires_confirmation' => true,
+				'blocked_invoices'      => $prescan['blocked_invoices'],
+				'unpaid_invoices'       => $prescan['unpaid_invoices'],
+			];
+		}
+
+		$execute = $this->handle_production_invoices_on_mo_cancel($id, true);
+
+		if (!$execute['success']) {
+			$this->db->trans_rollback();
+			$this->db->trans_complete();
+
+			return [
+				'success'               => false,
+				'requires_confirmation' => false,
+				'message'               => $execute['message'] ?: 'Failed to clean up production invoices.',
+			];
+		}
+
+		$this->db->trans_complete();
+
+		if ($this->db->trans_status() === false) {
+			return [
+				'success'               => false,
+				'requires_confirmation' => false,
+				'message'               => 'Transaction failed while cleaning up production invoices.',
+			];
+		}
+
+		log_activity(
+			'MO Cancel cleanup: retroactive production invoice cleanup completed'
+			. ' [MO ID: ' . (int) $id
+			. ', Deleted invoices: ' . count($execute['deleted_invoice_ids'])
+			. ', Blocked invoices: ' . count($execute['blocked_invoices'])
+			. ', Assignments updated: ' . (int) $execute['assignments_updated'] . ']'
+		);
+
+		return [
+			'success'               => true,
+			'requires_confirmation' => false,
+			'deleted_invoice_ids'   => $execute['deleted_invoice_ids'],
+			'blocked_invoices'      => $execute['blocked_invoices'],
+			'assignments_updated'   => $execute['assignments_updated'],
+		];
 	}
 
 	/**

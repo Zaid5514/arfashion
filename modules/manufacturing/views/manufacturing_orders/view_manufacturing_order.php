@@ -66,6 +66,10 @@
 										<button type="button" class="btn btn-default pull-left mark_as_cancel mright5"><?php echo _l('mrp_cancel'); ?></button>
 									<?php } ?>
 
+									<?php if($manufacturing_order->status == 'cancelled' && !empty($has_production_invoice_cleanup) && (has_permission('manufacturing', '', 'create') || has_permission('manufacturing', '', 'edit') || is_admin())){ ?>
+										<button type="button" class="btn btn-warning pull-left mo_cleanup_production_invoices mright5">Clean up production invoices</button>
+									<?php } ?>
+
 									<?php if($manufacturing_order->status == 'planned' || $manufacturing_order->status == 'in_progress' || $manufacturing_order->status == 'done' ){ ?>
 										
 										<a href="<?php echo admin_url('manufacturing/mo_work_order_manage/'.$manufacturing_order->id); ?>" class="btn btn-warning pull-right display-block mright5"><i class="fa fa-play-circle-o"></i> <?php echo _l('mrp_work_orders'); ?></a>
@@ -111,7 +115,8 @@
 								$proposal_id = $manufacturing_order->proposal_id; //PO Module
 								
 								// Determine which tab should be active by default
-								$production_tab_active = in_array($status, ['in_progress', 'done']);
+								$production_tab_active = in_array($status, ['in_progress', 'done', 'cancelled']);
+								$production_tab_visible = in_array($status, ['in_progress', 'done', 'cancelled']);
 								$component_tab_active = !$production_tab_active;
 								$proposal_to = $this->db->select('proposal_to')->from(db_prefix() . 'proposals')->where(['id' => $proposal_id])->get()->row('proposal_to'); //PO Module
 								$iids = $this->db->select('GROUP_CONCAT(iid) as iids')->from(db_prefix() . 'itemable')->where(['rel_type' => 'proposal', 'rel_id' => $proposal_id])->get()->row('iids'); //PO Module
@@ -262,7 +267,7 @@
 														<span class="fa-regular fa-clock"></span>&nbsp;<?php echo _l('Inventory Produced Logs'); ?>
 													</a>
 												</li>		
-												<?php if(in_array($status, ['in_progress', 'done'])): ?>										
+												<?php if(!empty($production_tab_visible)): ?>										
 												<li role="presentation" class="<?php echo $production_tab_active ? 'active' : ''; ?>">
 													<a href="#inventory_production_tab" aria-controls="inventory_production_tab" role="tab" data-toggle="tab">
 														<span class="fa-solid fa-industry"></span>&nbsp;<?php echo _l('Production'); ?>
@@ -412,6 +417,13 @@
 
 										<div role="tabpanel" class="tab-pane <?php echo $production_tab_active ? 'active' : ''; ?>" id="inventory_production_tab">
 										    <div id="modal_wrapper"></div>
+											<?php if($status == 'cancelled' && !empty($has_production_invoice_cleanup)){ ?>
+												<div class="alert alert-warning">
+													This manufacturing order was cancelled before production invoice cleanup existed.
+													Use <strong>Clean up production invoices</strong> to delete unpaid linked vendor invoices and mark production assignments as cancelled.
+													Paid invoices will be listed for manual review and will not be changed automatically.
+												</div>
+											<?php } ?>
 											<div class="text-right">
 												<?php if(has_permission('manufacturing','','view')){ ?>
 													<?php if($status != 'cancelled'){ ?>
@@ -477,13 +489,8 @@
 															<?php if(has_permission('manufacturing','','view')){ ?>
 																<a target="_blank" href="<?php echo admin_url('manufacturing/receipt_production/' . $item['id']); ?>?sr_no=<?php echo $sr_no ?>">
 																	<?php echo _l('Receipt'); ?>
-																</a> 
-																<?php if($status != 'cancelled'){ ?>
-																|
-																<a href="#" onclick="receive_production_modal(<?php echo $item['id'] ?>); return false;">
-																	<?php echo _l('Receive'); ?>
-																</a> 
-															    <?php if($item['status'] == 'completed' || $item['status'] == 'in_progress'): ?>
+																</a>
+																<?php if($item['status'] == 'completed' || $item['status'] == 'in_progress'): ?>
 																<?php
 																	$has_receive_logs = $this->db->query(
 																		'SELECT COUNT(*) AS c FROM ' . db_prefix() . 'mrp_bom_production_inventory_logs
@@ -495,8 +502,13 @@
 																	}
 																?>
 																<?php endif; ?>
+																<?php if($status != 'cancelled'){ ?>
+																|
+																<a href="#" onclick="receive_production_modal(<?php echo $item['id'] ?>); return false;">
+																	<?php echo _l('Receive'); ?>
+																</a>
 																<?php } ?>
-															    <?php if($item['status'] != 'completed' && $item['qty_received'] <= 0): ?>
+															    <?php if($status != 'cancelled' && $item['status'] != 'completed' && $item['qty_received'] <= 0): ?>
 																	|
 																	<a href="#" onclick="edit_production_modal(<?php echo $item['id']; ?>); return false;">
 																		<?php echo _l('Edit'); ?>
@@ -630,6 +642,41 @@
 					</div>
 					<div class="modal-footer">
 						<button type="button" class="btn btn-primary btn_mark_as_done" ><?php echo _l('mark_as_done'); ?></button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="modal fade" id="mo_cancel_blocked_modal" tabindex="-1" role="dialog" aria-labelledby="mo_cancel_blocked_modal_label">
+			<div class="modal-dialog modal-lg" role="document">
+				<div class="modal-content">
+					<div class="modal-header">
+						<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+						<h4 class="modal-title" id="mo_cancel_blocked_modal_label">Paid production invoices require review</h4>
+					</div>
+					<div class="modal-body">
+						<p class="text-warning">
+							This manufacturing order has production purchase invoices with payments recorded.
+							Those invoices will not be changed automatically. Unpaid linked invoices will still be deleted if you proceed.
+						</p>
+						<div class="table-responsive">
+							<table class="table table-bordered table-striped">
+								<thead>
+									<tr>
+										<th>Invoice #</th>
+										<th>Vendor</th>
+										<th>Total</th>
+										<th>Amount paid</th>
+										<th>Left to pay</th>
+									</tr>
+								</thead>
+								<tbody id="mo_cancel_blocked_table_body"></tbody>
+							</table>
+						</div>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-default" id="mo_cancel_go_back" data-dismiss="modal">Go back</button>
+						<button type="button" class="btn btn-warning" id="mo_cancel_proceed_anyway">Proceed anyway</button>
 					</div>
 				</div>
 			</div>

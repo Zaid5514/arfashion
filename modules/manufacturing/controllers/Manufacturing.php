@@ -1902,6 +1902,14 @@ class Manufacturing extends AdminController
 		}
 		
 		$data['pur_order_exist'] = $pur_order_exist;
+		$data['has_production_invoice_cleanup'] = false;
+		if ($data['manufacturing_order'] && $data['manufacturing_order']->status === 'cancelled') {
+			try {
+				$data['has_production_invoice_cleanup'] = $this->manufacturing_model->mo_has_pending_production_invoice_cleanup($id);
+			} catch (Throwable $e) {
+				log_message('error', 'MO production invoice cleanup check failed for MO ' . (int) $id . ': ' . $e->getMessage());
+			}
+		}
 		if (!$data['manufacturing_order']) {
 			blank_page(_l('manufacturing_order'), 'danger');
 		}
@@ -2358,19 +2366,106 @@ class Manufacturing extends AdminController
 			access_denied('manufacturing_order');
 		}
 
-		$mo_mark_as_cancel = $this->manufacturing_model->mo_mark_as_cancel($id);
+		$confirm_paid_invoices = (int) $this->input->post('confirm_paid_invoices');
+		$result = $this->manufacturing_model->mo_mark_as_cancel($id, $confirm_paid_invoices);
+		$this->respond_mo_production_invoice_action($result, 'cancel');
+	}
 
-		if($mo_mark_as_cancel){
-			$status='success';
-			$message = _l('mrp_updated_successfully');
-		}else{
-			$status='warning';
-			$message = _l('mrp_updated_failed');
+	/**
+	 * Retroactive production invoice cleanup for already-cancelled MOs.
+	 *
+	 * @param int $id
+	 */
+	public function mo_cleanup_production_invoices($id)
+	{
+		if (!$this->input->is_ajax_request()) {
+			show_404();
+		}
+
+		if (!has_permission('manufacturing', '', 'create')  && !has_permission('manufacturing', '', 'edit')  && !is_admin()) {
+			access_denied('manufacturing_order');
+		}
+
+		$confirm_paid_invoices = (int) $this->input->post('confirm_paid_invoices');
+		$result = $this->manufacturing_model->cleanup_production_invoices_for_cancelled_mo($id, $confirm_paid_invoices);
+		$this->respond_mo_production_invoice_action($result, 'cleanup');
+	}
+
+	/**
+	 * Shared JSON response for MO cancel / retroactive production invoice cleanup.
+	 *
+	 * @param array  $result
+	 * @param string $action cancel|cleanup
+	 */
+	private function respond_mo_production_invoice_action($result, $action = 'cancel')
+	{
+		if (!empty($result['requires_confirmation'])) {
+			echo json_encode([
+				'status'           => 'warning',
+				'message'          => 'This manufacturing order has production purchase invoices with payments recorded. Review the list below before proceeding.',
+				'blocked_invoices' => $result['blocked_invoices'],
+				'unpaid_invoices'  => $result['unpaid_invoices'],
+				'action'           => $action,
+			]);
+
+			return;
+		}
+
+		if (!empty($result['success'])) {
+			if ($action === 'cleanup' && !empty($result['nothing_to_cleanup'])) {
+				echo json_encode([
+					'status'  => 'success',
+					'message' => 'No pending production invoices or assignments need cleanup on this manufacturing order.',
+					'action'  => $action,
+				]);
+
+				return;
+			}
+
+			if ($action === 'cancel' && !empty($result['already_cancelled'])) {
+				echo json_encode([
+					'status'                          => 'info',
+					'message'                         => 'Manufacturing order is already cancelled. Use "Clean up production invoices" if linked vendor invoices still need review.',
+					'needs_production_invoice_cleanup'=> true,
+					'action'                          => $action,
+				]);
+
+				return;
+			}
+
+			$message = ($action === 'cleanup')
+				? 'Production invoice cleanup completed.'
+				: _l('mrp_updated_successfully');
+			$deleted_count = count($result['deleted_invoice_ids'] ?? []);
+
+			if ($deleted_count > 0) {
+				$message .= ' ' . $deleted_count . ' unpaid production purchase invoice(s) were deleted.';
+			}
+
+			if (!empty($result['assignments_updated'])) {
+				$message .= ' ' . (int) $result['assignments_updated'] . ' production assignment(s) marked cancelled.';
+			}
+
+			if (!empty($result['blocked_invoices'])) {
+				$message .= ' ' . count($result['blocked_invoices']) . ' paid invoice(s) were left untouched and require manual reconciliation.';
+			}
+
+			echo json_encode([
+				'status'              => 'success',
+				'message'             => trim($message),
+				'deleted_invoice_ids' => $result['deleted_invoice_ids'] ?? [],
+				'blocked_invoices'    => $result['blocked_invoices'] ?? [],
+				'assignments_updated' => (int) ($result['assignments_updated'] ?? 0),
+				'action'              => $action,
+			]);
+
+			return;
 		}
 
 		echo json_encode([
-			'status' => $status,
-			'message' => $message,
+			'status'  => 'warning',
+			'message' => $result['message'] ?? _l('mrp_updated_failed'),
+			'action'  => $action,
 		]);
 	}
 	
