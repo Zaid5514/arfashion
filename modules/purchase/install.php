@@ -1887,3 +1887,9 @@ if (!$CI->db->field_exists('wh_quantity_received' ,db_prefix() . 'pur_order_deta
       ADD COLUMN `wh_quantity_received` varchar(200)  NULL
   ;");
 }
+
+if (!$CI->db->field_exists('vendor_machine', db_prefix() . 'pur_vendor')) {
+  $CI->db->query('ALTER TABLE `' . db_prefix() . 'pur_vendor`
+      ADD COLUMN `vendor_machine` INT(11) NOT NULL DEFAULT 0
+  ;');
+}

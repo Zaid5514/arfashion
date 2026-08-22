@@ -165,12 +165,12 @@
                          'th_attrs'=>array('class'=>'toggleable', 'id'=>'th-company')
                         ),
                          array(
-                         'name'=>_l('contact_primary'),
-                         'th_attrs'=>array('class'=>'toggleable', 'id'=>'th-primary-contact')
+                         'name'=>_l('vendor_balance'),
+                         'th_attrs'=>array('class'=>'toggleable', 'id'=>'th-vendor-balance')
                         ),
                          array(
-                         'name'=>_l('company_primary_email'),
-                         'th_attrs'=>array('class'=>'toggleable', 'id'=>'th-primary-contact-email')
+                         'name'=>_l('vendor_machine'),
+                         'th_attrs'=>array('class'=>'toggleable', 'id'=>'th-vendor-machine')
                         ),
                         array(
                          'name'=>_l('clients_list_phone'),
@@ -199,8 +199,8 @@
                      }
 
                      render_datatable($table_data,'vendors',[],[
-                           'data-last-order-identifier' => 'vendors',
-                           'data-default-order'         => get_table_last_order('vendors'),
+                           'data-last-order-identifier' => 'vendors_balance_machine',
+                           'data-default-order'         => get_table_last_order('vendors_balance_machine'),
                      ]);
                      ?>
                </div>

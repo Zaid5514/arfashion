@@ -224,6 +224,20 @@ class Purchase_model extends App_Model
             }
         }
 
+        if (isset($data['isedit'])) {
+            unset($data['isedit']);
+        }
+
+        if (isset($data['userid'])) {
+            unset($data['userid']);
+        }
+
+        if (array_key_exists('vendor_machine', $data)) {
+            $data['vendor_machine'] = max(0, (int) $data['vendor_machine']);
+        } else {
+            $data['vendor_machine'] = 0;
+        }
+
         $contact_data = [];
         foreach ($this->contact_columns as $field) {
             if (isset($data[$field])) {
@@ -334,6 +348,18 @@ class Purchase_model extends App_Model
             unset($data['DataTables_Table_0_length']);
         }
 
+        if (isset($data['isedit'])) {
+            unset($data['isedit']);
+        }
+
+        if (isset($data['userid'])) {
+            unset($data['userid']);
+        }
+
+        if (array_key_exists('vendor_machine', $data)) {
+            $data['vendor_machine'] = max(0, (int) $data['vendor_machine']);
+        }
+
         if (isset($data['balance'])) {
             $data['balance'] = str_replace(',', '', $data['balance']);
             if($data['balance'] != '' && $data['balance'] > 0){
@@ -420,6 +446,10 @@ class Purchase_model extends App_Model
 
         if (isset($data['shipping_country']) && $data['shipping_country'] == '' || !isset($data['shipping_country'])) {
             $data['shipping_country'] = 0;
+        }
+
+        if (array_key_exists('vendor_machine', $data) && $data['vendor_machine'] === '') {
+            $data['vendor_machine'] = 0;
         }
 
         return $data;

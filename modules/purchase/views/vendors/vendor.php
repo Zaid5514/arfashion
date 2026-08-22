@@ -31,7 +31,7 @@
          </div>
          <?php } ?>
          <?php if(isset($client)){ ?>
-         <div class="col-md-3">
+         <div class="col-md-3 vendor-profile-sidebar">
             <div class="panel_s mbot5">
                <div class="panel-body padding-10">
                   <h4 class="bold">

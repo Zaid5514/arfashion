@@ -80,6 +80,8 @@
                       ?>
                   <?php $value=( isset($client) ? $client->phonenumber : ''); ?>
                   <?php echo render_input( 'phonenumber', 'client_phonenumber',$value); ?>
+                  <?php $vendor_machine = (isset($client) && isset($client->vendor_machine) ? $client->vendor_machine : ''); ?>
+                  <?php echo render_input('vendor_machine', 'vendor_machine', $vendor_machine, 'number', ['min' => 0, 'step' => 1]); ?>
                   <?php if((isset($client) && empty($client->website)) || !isset($client)){
                      $value=( isset($client) ? $client->website : '');
                      echo render_input( 'website', 'client_website',$value);

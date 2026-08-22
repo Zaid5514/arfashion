@@ -5,7 +5,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /*
 Module Name: Purchase
 Description: Purchase Management Module is a tool for managing your day-to-day purchases. It is packed with all necessary features that are needed by any business, which has to buy raw material for manufacturing or finished good purchases for trading
-Version: 1.5.0
+Version: 1.5.1
 Requires at least: 2.3.*
 Author: GreenTech Solutions
 Author URI: https://codecanyon.net/user/greentech_solutions
@@ -16,6 +16,7 @@ define('PURCHASE_MODULE_UPLOAD_FOLDER', module_dir_path(PURCHASE_MODULE_NAME, 'u
 define('PURCHASE_ORDER_RETURN_MODULE_UPLOAD_FOLDER', module_dir_path(PURCHASE_MODULE_NAME, 'uploads/order_return/'));
 
 hooks()->add_action('admin_init', 'purchase_permissions');
+hooks()->add_action('admin_init', 'purchase_ensure_vendor_machine_column');
 hooks()->add_action('app_admin_footer', 'purchase_head_components');
 hooks()->add_action('app_admin_footer', 'purchase_add_footer_components');
 hooks()->add_action('app_admin_head', 'purchase_add_head_components');
@@ -124,7 +125,7 @@ hooks()->add_filter('other_merge_fields_available_for', 'purchase_register_other
 define('PURCHASE_PATH', 'modules/purchase/uploads/');
 define('PURCHASE_MODULE_ITEM_UPLOAD_FOLDER', 'modules/purchase/uploads/item_img/');
 
-define('PURCHASE_REVISION', 150);
+define('PURCHASE_REVISION', 151);
 define('COMMODITY_ERROR_PUR', FCPATH );
 define('COMMODITY_EXPORT_PUR', FCPATH );
 define('PURCHASE_IMPORT_ITEM_ERROR', 'modules/purchase/uploads/import_item_error/');
@@ -149,6 +150,15 @@ function purchase_module_activation_hook()
 {
     $CI = &get_instance();
     require_once(__DIR__ . '/install.php');
+}
+
+function purchase_ensure_vendor_machine_column()
+{
+    $CI = &get_instance();
+    if (!$CI->db->field_exists('vendor_machine', db_prefix() . 'pur_vendor')) {
+        $CI->db->query('ALTER TABLE `' . db_prefix() . 'pur_vendor`
+            ADD COLUMN `vendor_machine` INT(11) NOT NULL DEFAULT 0');
+    }
 }
 
 /**
@@ -661,7 +671,7 @@ function purchase_head_components() {
         echo '<link href="' . module_dir_url(PURCHASE_MODULE_NAME, 'assets/css/estimate_preview_template.css') .'?v=' . PURCHASE_REVISION.'"  rel="stylesheet" type="text/css" />';
     }
     if(!(strpos($viewuri, '/admin/purchase/vendor') === false)){
-        echo '<link href="' . module_dir_url(PURCHASE_MODULE_NAME, 'assets/css/pur_order_manage.css') .'?v=' . PURCHASE_REVISION.'"  rel="stylesheet" type="text/css" />';
+        echo '<link href="' . module_dir_url(PURCHASE_MODULE_NAME, 'assets/css/pur_order_manage.css') .'?v=' . PURCHASE_REVISION . 's"  rel="stylesheet" type="text/css" />';
     }
 
     if(!(strpos($viewuri, '/admin/purchase/items') === false)){

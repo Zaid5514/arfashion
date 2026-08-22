@@ -1870,6 +1870,25 @@ function get_arr_vendors_by_pr($pur_request){
 }
 
 /**
+ * SQL select expression for a vendor's statement balance due.
+ *
+ * Matches all-time vendor statement: invoices - payment notes - approved payments + refunds.
+ *
+ * @return string
+ */
+function pur_vendor_statement_balance_select()
+{
+    $prefix = db_prefix();
+
+    return '(
+        COALESCE((SELECT SUM(inv.total) FROM ' . $prefix . 'pur_invoices inv WHERE inv.vendor = ' . $prefix . 'pur_vendor.userid), 0)
+        - COALESCE((SELECT SUM(dn.total) FROM ' . $prefix . 'pur_debit_notes dn WHERE dn.vendorid = ' . $prefix . 'pur_vendor.userid AND dn.status != 3), 0)
+        - COALESCE((SELECT SUM(pay.amount) FROM ' . $prefix . 'pur_invoice_payment pay INNER JOIN ' . $prefix . 'pur_invoices pinv ON pinv.id = pay.pur_invoice WHERE pinv.vendor = ' . $prefix . 'pur_vendor.userid AND pay.approval_status = 2), 0)
+        + COALESCE((SELECT SUM(ref.amount) FROM ' . $prefix . 'pur_debits_refunds ref INNER JOIN ' . $prefix . 'pur_debit_notes rdn ON rdn.id = ref.debit_note_id WHERE rdn.vendorid = ' . $prefix . 'pur_vendor.userid), 0)
+    ) as vendor_balance';
+}
+
+/**
  * Gets the quotations by pur request.
  */
 function get_quotations_by_pur_request($pur_request){

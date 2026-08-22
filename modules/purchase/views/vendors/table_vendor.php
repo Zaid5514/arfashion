@@ -6,18 +6,18 @@ $hasPermissionDelete = has_permission('purchase_vendors', '', 'delete');
 
 $custom_fields = get_table_custom_fields('vendors');
 $this->ci->db->query("SET sql_mode = ''");
+$customFieldsColumns = [];
 
 $aColumns = [
     '1',
     db_prefix().'pur_vendor.userid as userid',
     'company',
-    'firstname',
-    'email',
+    pur_vendor_statement_balance_select(),
+    db_prefix().'pur_vendor.vendor_machine as vendor_machine',
     db_prefix().'pur_vendor.phonenumber as phonenumber',
-    db_prefix().'pur_vendor.active',
     db_prefix().'pur_vendor.category',
-    db_prefix().'pur_vendor.location_id as location_id',
     db_prefix().'warehouse.warehouse_name as warehouse_name',
+    db_prefix().'pur_vendor.active',
 ];
 
 $sIndexColumn = 'userid';
@@ -104,7 +104,8 @@ $result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, [
     'lastname',
     db_prefix().'pur_vendor.zip as zip',
     'registration_confirmed',
-    db_prefix().'warehouse.warehouse_name as warehouse_name',
+    db_prefix().'pur_vendor.location_id as location_id',
+    db_prefix().'pur_vendor.default_currency as default_currency',
 ]);
 
 $output  = $result['output'];
@@ -152,11 +153,16 @@ foreach ($rResult as $aRow) {
 
     $row[] = $company;
 
-    // Primary contact
-    $row[] = ($aRow['contact_id'] ? '<a href="' . admin_url('purchase/vendor/' . $aRow['userid'] . '?group=contacts&contactid=' . $aRow['contact_id']) . '" target="_blank">' . $aRow['firstname'] . ' ' . $aRow['lastname'] . '</a>' : '');
+    $base_currency = get_base_currency_pur();
+    if (!empty($aRow['default_currency'])) {
+        $vendor_currency = pur_get_currency_by_id($aRow['default_currency']);
+        if ($vendor_currency) {
+            $base_currency = $vendor_currency;
+        }
+    }
+    $row[] = app_format_money($aRow['vendor_balance'], $base_currency->symbol);
 
-    // Primary contact email
-    $row[] = ($aRow['email'] ? '<a href="mailto:' . $aRow['email'] . '">' . $aRow['email'] . '</a>' : '');
+    $row[] = (int) $aRow['vendor_machine'];
 
     // Primary contact phone
     $row[] = ($aRow['phonenumber'] ? '<a href="tel:' . $aRow['phonenumber'] . '">' . $aRow['phonenumber'] . '</a>' : '');

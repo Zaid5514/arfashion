@@ -59,3 +59,62 @@ span.span_style{
     height:1px; 
     border:0px;
   }
+
+/* Keep main sidebar and vendor tabs visible while the statement scrolls */
+html:has(body.admin.purchase.vendor) {
+  height: auto;
+}
+
+body.admin.purchase.vendor {
+  height: auto;
+  min-height: 100%;
+}
+
+body.admin.purchase.vendor aside#menu {
+  position: fixed !important;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  height: 100vh;
+  max-height: 100vh;
+  min-height: 100vh !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 99;
+}
+
+body.admin.purchase.vendor.rtl aside#menu,
+[dir="rtl"] body.admin.purchase.vendor aside#menu {
+  left: auto;
+  right: 0;
+}
+
+body.admin.purchase.vendor #wrapper.customer_profile > .content > .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+body.admin.purchase.vendor #wrapper.customer_profile > .content > .row:before,
+body.admin.purchase.vendor #wrapper.customer_profile > .content > .row:after {
+  display: none;
+}
+
+body.admin.purchase.vendor .vendor-profile-sidebar {
+  position: sticky;
+  top: 15px;
+  z-index: 8;
+  max-height: calc(100vh - 30px);
+  overflow-y: auto;
+  background: #f1f5f9;
+  padding-bottom: 10px;
+}
+
+@media (max-width: 991px) {
+  body.admin.purchase.vendor .vendor-profile-sidebar {
+    position: relative;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+  }
+}
