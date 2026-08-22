@@ -4887,6 +4887,59 @@ class Manufacturing_model extends App_Model
 	}
 
 	/**
+	 * Log a production receipt print and return the updated count.
+	 *
+	 * @param  int $bom_production_inventory_id
+	 * @return array|false
+	 */
+	public function log_production_receipt_print($bom_production_inventory_id)
+	{
+		$assignments_table = db_prefix() . 'mrp_bom_production_inventory';
+		$logs_table = db_prefix() . 'mrp_bom_production_receipt_print_logs';
+
+		if (!$this->db->table_exists($assignments_table)) {
+			return false;
+		}
+
+		$assignment = $this->db->where('id', (int) $bom_production_inventory_id)->get($assignments_table)->row();
+		if (!$assignment) {
+			return false;
+		}
+
+		if ($this->db->field_exists('receipt_print_count', $assignments_table)) {
+			$this->db->set('receipt_print_count', 'COALESCE(receipt_print_count, 0) + 1', false);
+			$this->db->where('id', (int) $bom_production_inventory_id);
+			$this->db->update($assignments_table);
+		}
+
+		if ($this->db->table_exists($logs_table)) {
+			$this->db->insert($logs_table, [
+				'bom_production_inventory_id' => (int) $bom_production_inventory_id,
+				'staff_id'                    => get_staff_user_id(),
+				'printed_at'                  => date('Y-m-d H:i:s'),
+			]);
+		}
+
+		$print_count = 0;
+		if ($this->db->field_exists('receipt_print_count', $assignments_table)) {
+			$print_count = (int) $this->db->select('receipt_print_count')
+				->where('id', (int) $bom_production_inventory_id)
+				->get($assignments_table)
+				->row('receipt_print_count');
+		}
+
+		log_activity(
+			'Production receipt printed [Assignment ID: ' . (int) $bom_production_inventory_id
+			. ', MO ID: ' . (int) $assignment->manufacturing_order_id
+			. ', Print count: ' . $print_count . ']'
+		);
+
+		return [
+			'print_count' => $print_count,
+		];
+	}
+
+	/**
 	 * print barcode pdf
 	 * @param  [type] $print_barcode 
 	 * @return [type]                

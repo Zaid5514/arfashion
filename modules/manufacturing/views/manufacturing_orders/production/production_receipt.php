@@ -99,8 +99,25 @@
         /* PRINT STYLING */
         @media print {
             body {
+                margin: 0;
+                padding: 0;
+                background: #fff;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+            }
+            .container {
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+            .no-print,
+            .print-controls,
+            .print_button,
+            #production_receipt_print_button,
+            #receipt_print_count {
+                display: none !important;
+                visibility: hidden !important;
             }
             .section-title {
                 background: #112852 !important;
@@ -261,12 +278,80 @@
             </div>
            
         </div>
-    </div>  
-
-    <div style="text-align:right;">
-    <button onclick="window.print()" class="print_button">Print</button>
     </div>
+
 </div>
+
+<div class="no-print print-controls" style="width: 800px; margin: 15px auto 0; text-align: right;">
+    <p style="margin: 0 0 8px; font-size: 14px; color: #555;">
+        Times printed: <strong id="receipt_print_count"><?php echo (int) $receipt_print_count; ?></strong>
+    </p>
+    <button type="button" id="production_receipt_print_button" class="print_button">Print</button>
+</div>
+
+<script>
+(function () {
+    var receiptId = <?php echo (int) $bom_production_inventory_id; ?>;
+    var logUrl = <?php echo json_encode(admin_url('manufacturing/log_production_receipt_print/' . (int) $bom_production_inventory_id)); ?>;
+    var csrfName = <?php echo json_encode($this->security->get_csrf_token_name()); ?>;
+    var csrfHash = <?php echo json_encode($this->security->get_csrf_hash()); ?>;
+    var printLogging = false;
+    var printLoggedThisSession = false;
+
+    function updatePrintCount(count) {
+        var el = document.getElementById('receipt_print_count');
+        if (el) {
+            el.textContent = count;
+        }
+    }
+
+    function logProductionReceiptPrint() {
+        if (printLogging || printLoggedThisSession) {
+            return;
+        }
+
+        printLogging = true;
+
+        var body = new URLSearchParams();
+        body.append(csrfName, csrfHash);
+
+        fetch(logUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: body.toString()
+        })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+            if (data && data.success) {
+                printLoggedThisSession = true;
+                updatePrintCount(data.print_count);
+            }
+        })
+        .catch(function () {
+            /* keep silent on receipt page */
+        })
+        .finally(function () {
+            printLogging = false;
+        });
+    }
+
+    function printProductionReceipt() {
+        printLoggedThisSession = false;
+        window.print();
+    }
+
+    window.addEventListener('afterprint', logProductionReceiptPrint);
+
+    var printButton = document.getElementById('production_receipt_print_button');
+    if (printButton) {
+        printButton.addEventListener('click', printProductionReceipt);
+    }
+})();
+</script>
 
 </body>
 </html>

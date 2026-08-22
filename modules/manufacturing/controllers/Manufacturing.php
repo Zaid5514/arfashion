@@ -3055,6 +3055,10 @@ class Manufacturing extends AdminController
 		$this->db->where('b.id', $bom_production_inventory_id);
 		$data['production_inventory'] = $this->db->get()->row_array();
 
+		if (empty($data['production_inventory'])) {
+			show_404();
+		}
+
 		$this->db->select('bid.*, bi.product_name, bi.unit_id, ut.unit_name');
 		$this->db->from('tblmrp_bom_production_inventory_details bid'); // Ensure correct table name
 		$this->db->join('tblmrp_bom_inventory bi', 'bid.bom_inventory_id = bi.id', 'left'); 
@@ -3065,13 +3069,46 @@ class Manufacturing extends AdminController
 		$product_id = $this->db->select('*')->from('tblmrp_manufacturing_orders')->where('id', $data['production_inventory']['manufacturing_order_id'])->get()->row()->product_id;
 		$data['manufacturing_order_code'] = $this->db->select('*')->from('tblmrp_manufacturing_orders')->where('id', $data['production_inventory']['manufacturing_order_id'])->get()->row()->manufacturing_order_code;
 		$data['m_product'] = $this->db->select('*')->from('tblitems')->where('id', $product_id)->get()->row_array();
-
-		// echo "<pre>";
-		// var_dump($data['production_inventory_details']);
-		// var_dump($data['production_inventory']);
-		// echo "</pre>";
+		$data['bom_production_inventory_id'] = (int) $bom_production_inventory_id;
+		$data['receipt_print_count'] = (int) ($data['production_inventory']['receipt_print_count'] ?? 0);
 
 		$this->load->view('manufacturing_orders/production/production_receipt', $data);
+	}
+
+	/**
+	 * Increment production receipt print count when staff prints the receipt.
+	 *
+	 * @param int $bom_production_inventory_id
+	 */
+	public function log_production_receipt_print($bom_production_inventory_id)
+	{
+		if (!$this->input->is_ajax_request()) {
+			show_404();
+		}
+
+		if (!is_staff_logged_in()) {
+			ajax_access_denied();
+		}
+
+		if (!has_permission('manufacturing', '', 'view') && !has_permission('manufacturing', '', 'view_packing') && !is_admin()) {
+			access_denied('manufacturing_order');
+		}
+
+		$result = $this->manufacturing_model->log_production_receipt_print($bom_production_inventory_id);
+
+		if ($result === false) {
+			echo json_encode([
+				'success' => false,
+				'message' => 'Unable to log production receipt print.',
+			]);
+
+			return;
+		}
+
+		echo json_encode([
+			'success'     => true,
+			'print_count' => (int) $result['print_count'],
+		]);
 	}
 
 	public function receive_production_modal($bom_production_inventory_id = "")

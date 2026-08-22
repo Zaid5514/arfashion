@@ -5,7 +5,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /*
 Module Name: Manufacturing Management
 Description: This solution supports the entire spectrum of manufacturing styles, from high volume to engineer‐to‐order, and coordinates orders, equipment, facilities, inventory, and work-in-progress to minimize costs and maximize on-time delivery
-Version: 1.0.6
+Version: 1.0.7
 Requires at least: 2.3.*
 Author: GreenTech Solutions
 Author URI: https://codecanyon.net/user/greentech_solutions
@@ -38,7 +38,7 @@ hooks()->add_filter('relation_values', 'workorder_get_relation_values', 10, 2); 
 hooks()->add_filter('get_relation_data', 'workorder_get_relation_data', 10, 4); // new
 hooks()->add_filter('tasks_table_row_data', 'workorder_add_table_row', 10, 3);
 
-define('VERSION_MANUFACTURING', 1060);
+define('VERSION_MANUFACTURING', 1070);
 
 /**
  * After a purchase invoice is created, lock receive batch(es) to that invoice.

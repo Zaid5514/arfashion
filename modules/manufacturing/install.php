@@ -467,3 +467,25 @@ if (!$CI->db->table_exists(db_prefix() . 'mrp_option')) {
       ADD INDEX `idx_pur_invoice_id` (`pur_invoice_id`)
     ;");
   }
+
+  // Version 1.0.7 — production receipt print count
+  $assignments_table = db_prefix() . 'mrp_bom_production_inventory';
+  $print_logs_table = db_prefix() . 'mrp_bom_production_receipt_print_logs';
+
+  if ($CI->db->table_exists($assignments_table)
+      && !$CI->db->field_exists('receipt_print_count', $assignments_table)) {
+    $CI->db->query('ALTER TABLE `' . $assignments_table . '`
+      ADD COLUMN `receipt_print_count` INT(11) NOT NULL DEFAULT 0
+    ;');
+  }
+
+  if (!$CI->db->table_exists($print_logs_table)) {
+    $CI->db->query('CREATE TABLE `' . $print_logs_table . '` (
+      `id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+      `bom_production_inventory_id` INT(11) NOT NULL,
+      `staff_id` INT(11) NOT NULL,
+      `printed_at` DATETIME NOT NULL,
+      PRIMARY KEY (`id`),
+      KEY `idx_bom_production_inventory_id` (`bom_production_inventory_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=' . $CI->db->char_set . ';');
+  }

@@ -443,6 +443,7 @@
 															<th>Description</th>
 															<th>Type</th>
 															<th>Status</th>
+															<th>Printed</th>
 															<th>Options</th>
 														</tr>
 													</thead>
@@ -484,7 +485,8 @@
 																$class = $statusClasses[$item['status']] ?? 'secondary'; // Default to 'secondary' if status is unknown
 															?>
 																<span class="label label-<?php echo $class ?>" ><?php echo ucfirst(str_replace('_', ' ', $item['status'])); ?></span>
-															</td>	
+															</td>
+															<td><?php echo (int) ($item['receipt_print_count'] ?? 0); ?></td>	
 															<td>
 															<?php if(has_permission('manufacturing','','view')){ ?>
 																<a target="_blank" href="<?php echo admin_url('manufacturing/receipt_production/' . $item['id']); ?>?sr_no=<?php echo $sr_no ?>">
