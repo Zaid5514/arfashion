@@ -4,6 +4,7 @@
             <th>Sr No.</th>
             <th>Refrence</th>
             <th>Name</th>
+            <th>Date of Assign</th>
             <th>Quantity</th>
             <th>Description</th>
             <th>Type</th>
@@ -39,6 +40,7 @@
                 </a>                
             </td>
             <td><?php echo $item['product_name']; ?></td>
+            <td><?php echo !empty($item['created_at']) ? _d(date('Y-m-d', strtotime($item['created_at']))) : ''; ?></td>
             <td><?php echo $item['qty_received'].'/'.$item['qty_assigned']; ?></td>
             <td><?php echo $item['comments']; ?></td>
             <td><?php echo $item['is_inventory'] ? "Inventory" : "Finish Product"; ?></td>
