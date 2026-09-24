@@ -676,26 +676,44 @@
 	$("body").on("submit", "#receive_production", function(e) { 
 		e.preventDefault();
 		var form = this;
-		var data = $(form).serialize();
+		var $form = $(form);
+		var $btn = $form.find('button[type="submit"]');
+
+		if ($form.data('submitting') === true) {
+			return false;
+		}
+		$form.data('submitting', true);
+		$btn.prop('disabled', true).addClass('disabled');
+		var originalBtnHtml = $btn.html();
+		$btn.html('<i class="fa fa-spinner fa-spin"></i> ' + (typeof app !== 'undefined' && app.lang && app.lang.processing ? app.lang.processing : 'Processing...'));
+
+		var data = $form.serialize();
 		var url = form.action;
 		$.post(url, data).done(function (response) {
-			//response = JSON.parse(response);
 			if (response.success == true) {
-			alert_float("success", response.message);
-               if(response.is_inventory == 1) {
+				alert_float("success", response.message);
+				if (response.is_inventory == 1) {
 					setTimeout(function () {
 						window.location.reload();
 					}, 1000);
-			   }else{
-				    $('#change_product_qty').val(response.qty_received);
+				} else {
+					$('#change_product_qty').val(response.qty_received);
 					$('#commonModal').modal('hide');
 					$('#show_detail').modal('show');
-			   }
-
-
+					// Reload after closing detail modal so table updates
+					$('#show_detail').on('hidden.bs.modal', function () {
+						window.location.reload();
+					});
+				}
 			} else {
-			alert_float("warning", response.message);
+				alert_float("warning", response.message);
+				$form.data('submitting', false);
+				$btn.prop('disabled', false).removeClass('disabled').html(originalBtnHtml);
 			}
+		}).fail(function () {
+			alert_float("danger", "An error occurred while receiving inventory. Please try again.");
+			$form.data('submitting', false);
+			$btn.prop('disabled', false).removeClass('disabled').html(originalBtnHtml);
 		});	
 	});	
 
@@ -715,18 +733,34 @@
 	$("body").on("submit", "#update_production", function(e) { 
 		e.preventDefault();
 		var form = this;
-		var data = $(form).serialize();
+		var $form = $(form);
+		var $btn = $form.find('button[type="submit"]');
+
+		if ($form.data('submitting') === true) {
+			return false;
+		}
+		$form.data('submitting', true);
+		$btn.prop('disabled', true).addClass('disabled');
+		var originalBtnHtml = $btn.html();
+		$btn.html('<i class="fa fa-spinner fa-spin"></i> ' + (typeof app !== 'undefined' && app.lang && app.lang.processing ? app.lang.processing : 'Processing...'));
+
+		var data = $form.serialize();
 		var url = form.action;
 		$.post(url, data).done(function (response) {
-			//response = JSON.parse(response);
 			if (response.success == true) {
-    			alert_float("success", response.message);
+				alert_float("success", response.message);
+				setTimeout(function () {
+					window.location.reload();
+				}, 1000);
 			} else {
-    			alert_float("warning", response.message);
+				alert_float("warning", response.message);
+				$form.data('submitting', false);
+				$btn.prop('disabled', false).removeClass('disabled').html(originalBtnHtml);
 			}
-			setTimeout(function () {
-			window.location.reload();
-			}, 1000);
+		}).fail(function () {
+			alert_float("danger", "An error occurred while updating. Please try again.");
+			$form.data('submitting', false);
+			$btn.prop('disabled', false).removeClass('disabled').html(originalBtnHtml);
 		});	
 	});	
 

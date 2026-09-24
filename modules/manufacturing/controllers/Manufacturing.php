@@ -3128,36 +3128,85 @@ class Manufacturing extends AdminController
 		// error_reporting(E_ALL);
 		// ini_set('display_errors', 1);
 
-		$bom_production_inventory_id = $this->input->post('bom_production_inventory_id');
-		$qty_received = (int) $this->input->post('qty_received');
-		$qty_lost = (int) $this->input->post('qty_lost');
-		$qty_pending = (int) $this->input->post('qty_pending');
-		$qty_assigned = (int) $this->input->post('qty_assigned');
+		$bom_production_inventory_id = (int) $this->input->post('bom_production_inventory_id');
+		$qty_received = (float) $this->input->post('qty_received');
+		$qty_lost = (float) $this->input->post('qty_lost');
 		$comments = $this->input->post('comments');
-		$status = ($qty_pending == 0) ? 'completed' : 'in_progress';
 		$is_inventory = $this->input->post('is_inventory');
 		$manufacturing_order_id = $this->input->post('manufacturing_order_id');
 		$product_name = $this->input->post('product_name');
-		$comments = $this->input->post('comments');
 		$inventory_system = $this->input->post('inventory_system');
 
-		if($qty_pending < 0){
-			$response = [
-				'success' => false,
-				'message' => 'Pending quantity value incorrect!'
-			];
-
-			// Return JSON response
+		if ($bom_production_inventory_id <= 0) {
 			header('Content-Type: application/json');
-			echo json_encode($response, JSON_PRETTY_PRINT);
-			exit;			
+			echo json_encode([
+				'success' => false,
+				'message' => 'Invalid production inventory record!'
+			], JSON_PRETTY_PRINT);
+			exit;
 		}
-	
+
+		if (($qty_received + $qty_lost) <= 0) {
+			header('Content-Type: application/json');
+			echo json_encode([
+				'success' => false,
+				'message' => 'Received or lost quantity must be greater than zero!'
+			], JSON_PRETTY_PRINT);
+			exit;
+		}
+
+		// Fetch existing production inventory record
+		$inventory = $this->db->where('id', $bom_production_inventory_id)->get('tblmrp_bom_production_inventory')->row_array();
+		if (!$inventory) {
+			header('Content-Type: application/json');
+			echo json_encode([
+				'success' => false,
+				'message' => 'Production inventory record not found!'
+			], JSON_PRETTY_PRINT);
+			exit;
+		}
+
+		// 1. Idempotency guard: Prevent rapid duplicate submissions within 15 seconds
+		$recent_log = $this->db->select('id')
+			->from('tblmrp_bom_production_inventory_logs')
+			->where('bom_production_inventory_id', $bom_production_inventory_id)
+			->where('qty_received', $qty_received)
+			->where('qty_lost', $qty_lost)
+			->where('created_at >=', date('Y-m-d H:i:s', time() - 15))
+			->order_by('id', 'desc')
+			->limit(1)
+			->get()
+			->row();
+
+		if ($recent_log) {
+			header('Content-Type: application/json');
+			echo json_encode([
+				'success' => false,
+				'message' => 'A receive entry with this quantity was just recorded a few seconds ago. Please refresh to avoid duplicate entries.'
+			], JSON_PRETTY_PRINT);
+			exit;
+		}
+
+		// 2. Validate against actual database pending quantity
+		$current_pending = (float) $inventory['qty_pending'];
+		if (($qty_received + $qty_lost) > $current_pending) {
+			header('Content-Type: application/json');
+			echo json_encode([
+				'success' => false,
+				'message' => 'Received quantity (' . ($qty_received + $qty_lost) . ') exceeds remaining pending quantity (' . $current_pending . ')!'
+			], JSON_PRETTY_PRINT);
+			exit;
+		}
+
+		$qty_assigned = (float) $inventory['qty_assigned'];
+		$new_pending = max(0, $current_pending - ($qty_received + $qty_lost));
+		$status = ($new_pending == 0) ? 'completed' : 'in_progress';
+
 		// Use set() for updating
 		$this->db->set('qty_received', 'qty_received + ' . $qty_received, FALSE);
 		$this->db->set('qty_lost', 'qty_lost + ' . $qty_lost, FALSE);
 		$this->db->set('qty_assigned', $qty_assigned);
-		$this->db->set('qty_pending', $qty_pending);
+		$this->db->set('qty_pending', $new_pending);
 		$this->db->set('status', $status);
 		//$this->db->set('comments', $comments);
 		$this->db->set('updated_at', date('Y-m-d H:i:s'));
@@ -3170,7 +3219,7 @@ class Manufacturing extends AdminController
 			$logs = [
 				'bom_production_inventory_id' => $bom_production_inventory_id,
 				'qty_assigned'  => $qty_assigned,
-				'qty_pending'   => $qty_pending,
+				'qty_pending'   => $new_pending,
 				'qty_received'  => $qty_received, // Log only new received qty
 				'qty_lost'      => $qty_lost, // Log only new lost qty
 				'status'        => $status,
