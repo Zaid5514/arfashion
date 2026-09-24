@@ -16,7 +16,7 @@
 
 			?>
 
-			<?php echo form_open_multipart(admin_url('manufacturing/add_edit_manufacturing_order/'.$id), array('id' => 'add_update_manufacturing_order','autocomplete'=>'off')); ?>
+			<?php echo form_open(admin_url('manufacturing/add_edit_manufacturing_order/'.$id), array('id' => 'add_update_manufacturing_order','autocomplete'=>'off')); ?>
 
 			<div class="col-md-12" >
 				<div class="panel_s">

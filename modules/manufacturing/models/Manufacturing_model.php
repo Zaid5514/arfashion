@@ -1882,7 +1882,12 @@ class Manufacturing_model extends App_Model
 
 		//create working hours data
 		if(isset($product_tab_hs)){
-			$working_hour_detail = json_decode($product_tab_hs);
+			$decoded_product_tab = base64_decode($product_tab_hs, true);
+			if ($decoded_product_tab !== false && json_decode($decoded_product_tab) !== null) {
+				$working_hour_detail = json_decode($decoded_product_tab);
+			} else {
+				$working_hour_detail = json_decode($product_tab_hs);
+			}
 
 			$es_detail = [];
 			$row = [];
@@ -1960,7 +1965,12 @@ class Manufacturing_model extends App_Model
 
 		//create working hours data
 		if(isset($product_tab_hs)){
-			$working_hour_detail = json_decode($product_tab_hs);
+			$decoded_product_tab = base64_decode($product_tab_hs, true);
+			if ($decoded_product_tab !== false && json_decode($decoded_product_tab) !== null) {
+				$working_hour_detail = json_decode($decoded_product_tab);
+			} else {
+				$working_hour_detail = json_decode($product_tab_hs);
+			}
 
 			$es_detail = [];
 			$row = [];

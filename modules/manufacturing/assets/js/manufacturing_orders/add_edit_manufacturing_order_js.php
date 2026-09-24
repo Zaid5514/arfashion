@@ -163,7 +163,10 @@ function customDropdownRenderer(instance, td, row, col, prop, value, cellPropert
 $('select[name="product_id"]').on('change', function() {
 	"use strict";
 
-	var product_id =$(this).val();
+	var product_id = $(this).val();
+	if (!product_id) {
+		return;
+	}
 
 	$.get(admin_url + 'manufacturing/get_data_create_manufacturing_order/' + product_id, function (response) {
 		$("select[name='bom_id']").html('');
@@ -190,9 +193,13 @@ $('select[name="product_id"]').on('change', function() {
 $('select[name="bom_id"]').on('change', function() {
 	"use strict";
 
-	var bill_of_material_id =$(this).val();
+	var bill_of_material_id = $(this).val();
 	var product_id = $('select[name="product_id"]').val();
 	var product_qty = $('input[name="product_qty"]').val();
+
+	if (!bill_of_material_id || !product_id || !product_qty) {
+		return;
+	}
 
 	$.get(admin_url + 'manufacturing/get_bill_of_material_detail/' + bill_of_material_id+'/'+product_id+'/'+product_qty, function (response) {
 
@@ -214,9 +221,13 @@ $('select[name="bom_id"]').on('change', function() {
 $('input[name="product_qty"]').on('change', function() {
 	"use strict";
 
-	var product_qty =$(this).val();
+	var product_qty = $(this).val();
 	var product_id = $('select[name="product_id"]').val();
 	var bill_of_material_id = $('select[name="bom_id"]').val();
+
+	if (!product_qty || !bill_of_material_id || !product_id) {
+		return;
+	}
 
 	$.get(admin_url + 'manufacturing/get_bill_of_material_detail/' + bill_of_material_id+'/'+product_id+'/'+product_qty, function (response) {
 
@@ -242,8 +253,14 @@ $('.add_manufacturing_order').on('click', function() {
 
 	var valid_working_hour = $('#working_hour_hs').find('.htInvalid').html();
 
-		$('input[name="product_tab_hs"]').val(JSON.stringify(product_tabs.getData()));   
-		$('#add_update_manufacturing_order').submit(); 
+	var tableData = JSON.stringify(product_tabs.getData());
+	// Base64 encode UTF-8 safely to avoid ModSecurity WAF 406/403 false positives
+	var encodedData = btoa(encodeURIComponent(tableData).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+		return String.fromCharCode('0x' + p1);
+	}));
+
+	$('input[name="product_tab_hs"]').val(encodedData);   
+	$('#add_update_manufacturing_order').submit(); 
 
 });
 
@@ -253,21 +270,20 @@ $(document).ready(function() {
         const iids = $(this).find(':selected').data('iid');
         const idArray = iids ? iids.toString().split(',') : [];
 
-        // Reset and hide all options first
-        $('#product_id option').each(function() {
-            const value = $(this).val();
-            if (value === "" || idArray.includes(value)) {
-                $(this).show();
-            } else {
-                $(this).hide();
-            }
-        });
+        if (idArray.length > 0) {
+            // Reset and filter options based on proposal items
+            $('#product_id option').each(function() {
+                const value = $(this).val();
+                if (value === "" || idArray.includes(value)) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
 
-        // Refresh Bootstrap select UI
-        $('#product_id').selectpicker('refresh');
-
-        // Optional: clear the selected product
-        $('#product_id').val('').selectpicker('refresh');
+            // Refresh Bootstrap select UI
+            $('#product_id').selectpicker('refresh');
+        }
     });	
 });
 
@@ -276,24 +292,29 @@ $(document).ready(function() {
     const iid = '<?php echo $this->input->get("iid"); ?>';
     const product_qty = '<?php echo $this->input->get("product_qty"); ?>';
 
-    $('#proposal_id')
-        .val(proposalId)
-        .selectpicker('refresh')
-        .trigger('change');
-
-    // Wait a bit to ensure the change event processing completes
-    setTimeout(function() {
-        $('#product_id')
-            .val(iid)
+    if (proposalId) {
+        $('#proposal_id')
+            .val(proposalId)
             .selectpicker('refresh')
             .trigger('change');
-    }, 500); // 200ms delay is usually safe
 
-	$('#product_qty').val(product_qty);
+        // Wait a bit to ensure the change event processing completes
+        setTimeout(function() {
+            if (iid) {
+                $('#product_id')
+                    .val(iid)
+                    .selectpicker('refresh')
+                    .trigger('change');
+            }
+        }, 500);
 
-	setTimeout(function () {
-		$('#product_qty').trigger('change');
-	}, 2000);
+        if (product_qty) {
+            $('#product_qty').val(product_qty);
 
+            setTimeout(function () {
+                $('#product_qty').trigger('change');
+            }, 2000);
+        }
+    }
 });
 </script>
