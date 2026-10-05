@@ -489,3 +489,12 @@ if (!$CI->db->table_exists(db_prefix() . 'mrp_option')) {
       KEY `idx_bom_production_inventory_id` (`bom_production_inventory_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=' . $CI->db->char_set . ';');
   }
+
+  // Version 1.0.8 — recover lost quantity into a new invoice batch
+  $production_logs_table = db_prefix() . 'mrp_bom_production_inventory_logs';
+  if ($CI->db->table_exists($production_logs_table) && !$CI->db->field_exists('movement_type', $production_logs_table)) {
+    $CI->db->query('ALTER TABLE `' . $production_logs_table . '`
+      ADD COLUMN `movement_type` VARCHAR(30) NOT NULL DEFAULT \'receive\' AFTER `qty_lost`,
+      ADD INDEX `idx_movement_type` (`movement_type`)
+    ;');
+  }

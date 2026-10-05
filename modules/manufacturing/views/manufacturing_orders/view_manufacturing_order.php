@@ -472,7 +472,12 @@
 															<td><?php echo $item['company']; ?></td>
 															<td><?php echo $item['product_name']; ?></td>
 															<td><?php echo !empty($item['created_at']) ? _d(date('Y-m-d', strtotime($item['created_at']))) : ''; ?></td>
-															<td><?php echo $item['qty_received'].'/'.$item['qty_assigned']; ?></td>
+															<td>
+																<?php echo $item['qty_received'].'/'.$item['qty_assigned']; ?>
+																<?php if ((float) $item['qty_lost'] > 0): ?>
+																	<br><span class="text-danger">Lost: <?php echo $item['qty_lost']; ?></span>
+																<?php endif; ?>
+															</td>
 															<td><?php echo $item['comments']; ?></td>
 															<td><?php echo $item['is_inventory'] ? "Inventory" : "Finish Product"; ?></td>
 															<td>
@@ -483,8 +488,7 @@
 																	'completed'   => 'success',
 																	'cancelled'   => 'warning'
 																];
-
-																$class = $statusClasses[$item['status']] ?? 'secondary'; // Default to 'secondary' if status is unknown
+																$class = $statusClasses[$item['status']] ?? 'secondary';
 															?>
 																<span class="label label-<?php echo $class ?>" ><?php echo ucfirst(str_replace('_', ' ', $item['status'])); ?></span>
 															</td>
@@ -511,6 +515,10 @@
 																<a href="#" onclick="receive_production_modal(<?php echo $item['id'] ?>); return false;">
 																	<?php echo _l('Receive'); ?>
 																</a>
+																<?php if ((float) $item['qty_lost'] > 0): ?>
+																	|
+																	<a href="#" onclick="recover_lost_modal(<?php echo (int) $item['id']; ?>); return false;">Recover lost</a>
+																<?php endif; ?>
 																<?php } ?>
 															    <?php if($status != 'cancelled' && $item['status'] != 'completed' && $item['qty_received'] <= 0): ?>
 																	|
@@ -526,7 +534,11 @@
                                                                 <?php if($status != 'cancelled'){ ?>
 																	<a href="#" onclick="receive_production_modal(<?php echo $item['id'] ?>); return false;">
 																		<?php echo _l('Receive'); ?>
-																	</a> 																
+																	</a>
+																	<?php if ((float) $item['qty_lost'] > 0): ?>
+																		|
+																		<a href="#" onclick="recover_lost_modal(<?php echo (int) $item['id']; ?>); return false;">Recover lost</a>
+																	<?php endif; ?>
                                                                 <?php } ?>
 															<?php } ?>
 														    </td>

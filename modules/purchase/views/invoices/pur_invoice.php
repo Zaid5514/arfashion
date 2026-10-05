@@ -435,11 +435,32 @@ $(document).ready(function () {
     var qty_pending = "<?php echo $this->input->get('qty_pending'); ?>";
     var price = "<?php echo $this->input->get('price'); ?>";
     var deduct_price = "<?php echo $this->input->get('deduct_price'); ?>";
+    var movementType = <?php echo json_encode((string) $this->input->get('movement_type')); ?>;
+    var batchComment = <?php echo json_encode((string) $this->input->get('batch_comment')); ?>;
 
 	///others
-    var assinged_total_price = price * qty_received;
-    var lost_total_price = deduct_price * qty_lost;
+    var receivePrice = parseFloat(price) || 0;
+    var lostPrice = parseFloat(deduct_price) || 0;
+    var receivedQty = parseFloat(qty_received) || 0;
+    var unitPrice = receivePrice;
+    var assinged_total_price = receivePrice * receivedQty;
+    var lost_total_price = lostPrice * (parseFloat(qty_lost) || 0);
     var recievable_total_price = assinged_total_price - lost_total_price;
+    var recoveryNote = '';
+    if (movementType === 'recover_lost') {
+        unitPrice = receivePrice + lostPrice;
+        var receivePay = receivedQty * receivePrice;
+        var deductionReturned = receivedQty * lostPrice;
+        assinged_total_price = receivePay;
+        lost_total_price = deductionReturned;
+        recievable_total_price = receivePay + deductionReturned;
+        recoveryNote = "\nRECOVERED FROM LOST\n" +
+            "--------------------------\n" +
+            "The original invoice is unchanged.\n" +
+            "Receive pay: " + receivePay + " " + base_currency + "\n" +
+            "Lost deduction returned: " + deductionReturned + " " + base_currency + "\n" +
+            "New invoice total: " + recievable_total_price + " " + base_currency + "\n";
+    }
     var batchCount = bom_production_inventory_log_ids ? bom_production_inventory_log_ids.split(',').filter(Boolean).length : 0;
 
 	$(document).on('focus', 'input[id^="items"][id$="[unit_price]"], #unit_price', function () {
@@ -466,7 +487,10 @@ $(document).ready(function () {
     $('textarea[name="item_name"]').val(item_name);
     $('textarea[name="description"]').val(description);
     $('input[name="quantity"]').val(qty_received);
-    $('input[name="unit_price"]').val(price);
+    $('input[name="unit_price"]').val(unitPrice);
+    if (movementType === 'recover_lost' && description) {
+        $('textarea[name="description"]').val(description + "\nRecovered from lost. Unit price is receive price plus lost price.");
+    }
 	$('textarea[name="custom_fields[pur_invoice][2]"]').val(
 		(batchCount > 1 ? "MERGED BATCH INVOICE\n" : "BATCH INVOICE\n") +
 		"--------------------------\n" +
@@ -485,8 +509,10 @@ $(document).ready(function () {
 		"Receive Price - Per Piece: " + price + " " + base_currency + "\n" +
 		"Lost Price - Per Piece: " + deduct_price + " " + base_currency + "\n" +
 		"Assigned Total: " + assinged_total_price + " " + base_currency + "\n" +
-		"Lost Price: " + lost_total_price + " " + base_currency + "\n" +
-		"Receivable Amount: " + recievable_total_price + " " + base_currency
+		(movementType === 'recover_lost' ? "Lost deduction returned: " : "Lost Price: ") + lost_total_price + " " + base_currency + "\n" +
+		"Receivable Amount: " + recievable_total_price + " " + base_currency +
+		recoveryNote +
+		(batchComment ? ("\nBatch comment: " + batchComment) : "")
 	).attr('readonly', true);
 
     // Set textarea rows

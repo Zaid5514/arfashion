@@ -567,6 +567,31 @@
 		$(".selectpicker").selectpicker('refresh');
 	}
 
+	function recover_lost_modal(bom_production_inventory_id) {
+		"use strict";
+		$("#modal_wrapper").load("<?php echo admin_url('manufacturing/recover_lost_modal'); ?>", {
+			bom_production_inventory_id: bom_production_inventory_id,
+		}, function() {
+			$("body").find('#commonModal').modal({ show: true, backdrop: 'static' });
+			update_recover_lost_preview();
+		});
+	}
+
+	function update_recover_lost_preview() {
+		var input = $('#recover_lost_form input[name="qty_recovered"]');
+		if (!input.length) {
+			return;
+		}
+		var qty = parseFloat(input.val()) || 0;
+		var price = parseFloat(input.data('price')) || 0;
+		var deduct = parseFloat(input.data('deduct-price')) || 0;
+		var receivePay = qty * price;
+		var reversal = qty * deduct;
+		$('#recover_lost_preview').text('New invoice: ' + qty + ' × ' + price + ' receive + ' + qty + ' × ' + deduct + ' lost deduction returned = ' + (receivePay + reversal) + '. The original invoice is not changed.');
+	}
+
+	$(document).on('input', '#recover_lost_form input[name="qty_recovered"]', update_recover_lost_preview);
+
 	function production_invoices_modal(bom_production_inventory_id) {
 		"use strict";
 
@@ -657,19 +682,13 @@
 
 
 	$(document).on('input', '#receive_production input[name="qty_received"], #receive_production input[name="qty_lost"]', function () {
-		let form = $(this).closest('#receive_production'); // Get the closest form
+		let form = $(this).closest('#receive_production');
 
-		let qtyAssigned = parseFloat(form.find('input[name="qty_assigned"]').val()) || 0;
 		let qtyPendingOriginal = parseFloat(form.find('input[name="qty_pending"]').data('qty-pending')) || 0;
 		let qtyReceived = parseFloat(form.find('input[name="qty_received"]').val()) || 0;
 		let qtyLost = parseFloat(form.find('input[name="qty_lost"]').val()) || 0;
-
-		// Calculate pending quantity
-		//let qtyPendingNew = qtyAssigned - (qtyReceived + qtyLost);
 		let qtyPendingNew = qtyPendingOriginal - (qtyReceived + qtyLost);
-		//qtyPendingNew = qtyPendingNew < 0 ? 0 : qtyPendingNew; // Ensure it doesn't go negative
 
-		// Update the pending quantity field
 		form.find('input[name="qty_pending"]').val(qtyPendingNew);
 	});
 
@@ -716,6 +735,44 @@
 			$btn.prop('disabled', false).removeClass('disabled').html(originalBtnHtml);
 		});	
 	});	
+
+	function submit_production_balance_form(e, successReload) {
+		e.preventDefault();
+		var form = e.target;
+		var $form = $(form);
+		var $btn = $form.find('button[type="submit"]');
+		if ($form.data('submitting') === true) {
+			return false;
+		}
+		$form.data('submitting', true);
+		$btn.prop('disabled', true).addClass('disabled');
+		var originalBtnHtml = $btn.html();
+		$btn.html('<i class="fa fa-spinner fa-spin"></i> Processing...');
+		$.post(form.action, $form.serialize()).done(function (response) {
+			if (response.success == true) {
+				alert_float("success", response.message);
+				$('#commonModal').modal('hide');
+				if (successReload) {
+					setTimeout(function () {
+						window.location.reload();
+					}, 800);
+				}
+			} else {
+				alert_float("warning", response.message);
+				$form.data('submitting', false);
+				$btn.prop('disabled', false).removeClass('disabled').html(originalBtnHtml);
+			}
+		}).fail(function () {
+			alert_float("danger", "Could not save this quantity. Please try again.");
+			$form.data('submitting', false);
+			$btn.prop('disabled', false).removeClass('disabled').html(originalBtnHtml);
+		});
+		return false;
+	}
+
+	$("body").on("submit", "#recover_lost_form", function (e) {
+		return submit_production_balance_form(e, true);
+	});
 
 	function edit_production_modal(id) {
 		"use strict";

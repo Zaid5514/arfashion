@@ -32,10 +32,14 @@ $can_make_invoice = has_permission('manufacturing', '', 'view');
 $uninvoiced_qty = 0;
 $uninvoiced_lost = 0;
 $uninvoiced_ids = [];
+$recover_uninvoiced_count = 0;
 $invoiced_count = 0;
 foreach ($production_inventory_logs as $log) {
+	$is_recover = (($log['movement_type'] ?? '') === 'recover_lost');
 	if ((int) ($log['pur_invoice_id'] ?? 0) > 0) {
 		$invoiced_count++;
+	} elseif ($is_recover) {
+		$recover_uninvoiced_count++;
 	} else {
 		$uninvoiced_qty += (float) $log['qty_received'];
 		$uninvoiced_lost += (float) $log['qty_lost'];
@@ -98,7 +102,8 @@ $base_params = [
 									<th width="18%">Date</th>
 									<th width="10%">Received</th>
 									<th width="10%">Lost</th>
-									<th width="42%">Invoice</th>
+									<th width="12%">Type</th>
+									<th width="30%">Invoice</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -106,14 +111,20 @@ $base_params = [
 									<?php
 										$linked_invoice_id = (int) ($log['pur_invoice_id'] ?? 0);
 										$is_uninvoiced = $linked_invoice_id <= 0;
+										$movement = $log['movement_type'] ?? 'receive';
+										$is_recover = $movement === 'recover_lost';
+										$movement_labels = [
+											'receive' => 'Receive',
+											'recover_lost' => 'Recovered lost',
+										];
 									?>
 									<tr data-log-id="<?php echo (int) $log['id']; ?>"
 										data-qty-received="<?php echo (float) $log['qty_received']; ?>"
-										data-qty-lost="<?php echo (float) $log['qty_lost']; ?>"
-										data-uninvoiced="<?php echo $is_uninvoiced ? '1' : '0'; ?>">
+										data-qty-lost="<?php echo $is_recover ? 0 : (float) $log['qty_lost']; ?>"
+										data-uninvoiced="<?php echo ($is_uninvoiced && !$is_recover) ? '1' : '0'; ?>">
 										<?php if ($can_make_invoice && count($uninvoiced_ids) > 0): ?>
 											<td>
-												<?php if ($is_uninvoiced): ?>
+												<?php if ($is_uninvoiced && !$is_recover): ?>
 													<input type="checkbox" class="bom-invoice-log-check" value="<?php echo (int) $log['id']; ?>" checked>
 												<?php endif; ?>
 											</td>
@@ -121,7 +132,8 @@ $base_params = [
 										<td><?php echo ++$x; ?></td>
 										<td><?php echo htmlspecialchars(date('d M Y H:iA', strtotime($log['created_at']))); ?></td>
 										<td><?php echo htmlspecialchars($log['qty_received']); ?></td>
-										<td><?php echo htmlspecialchars($log['qty_lost']); ?></td>
+										<td><?php echo htmlspecialchars($is_recover ? 0 : $log['qty_lost']); ?></td>
+										<td><?php echo htmlspecialchars($movement_labels[$movement] ?? 'Receive'); ?></td>
 										<td>
 											<?php if ($linked_invoice_id > 0):
 												$inv_no = function_exists('get_pur_invoice_number') ? get_pur_invoice_number($linked_invoice_id) : $linked_invoice_id;
@@ -133,7 +145,9 @@ $base_params = [
 												$single_params = array_merge($base_params, [
 													'bom_production_inventory_log_ids' => $log['id'],
 													'qty_received' => $log['qty_received'],
-													'qty_lost' => $log['qty_lost'],
+													'qty_lost' => $is_recover ? 0 : $log['qty_lost'],
+													'movement_type' => $movement,
+													'batch_comment' => $log['comments'],
 												]);
 											?>
 												<span class="text-warning">Pending</span>
@@ -173,8 +187,11 @@ $base_params = [
 						class="btn btn-default bom-make-invoice-link">
 						Invoice All Pending (<?php echo rtrim(rtrim(number_format($uninvoiced_qty, 2, '.', ''), '0'), '.'); ?>)
 					</a>
-				<?php elseif ($invoiced_count > 0): ?>
+				<?php elseif ($invoiced_count > 0 && $recover_uninvoiced_count === 0): ?>
 					<span class="text-success">All received batches are invoiced.</span>
+				<?php endif; ?>
+				<?php if ($recover_uninvoiced_count > 0): ?>
+					<p class="text-muted" style="margin-top:8px;">Recovered lost batches are invoiced one at a time. Their price is the receive price plus the lost deduction being returned.</p>
 				<?php endif; ?>
 				<button type="button" class="btn btn-default close_btn pull-right" data-dismiss="modal"><?php echo _l('hr_close'); ?></button>
 			</div>

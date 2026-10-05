@@ -3129,8 +3129,8 @@ class Manufacturing extends AdminController
 		// ini_set('display_errors', 1);
 
 		$bom_production_inventory_id = (int) $this->input->post('bom_production_inventory_id');
-		$qty_received = (float) $this->input->post('qty_received');
-		$qty_lost = (float) $this->input->post('qty_lost');
+		$qty_received = round((float) $this->input->post('qty_received'), 2);
+		$qty_lost = round((float) $this->input->post('qty_lost'), 2);
 		$comments = $this->input->post('comments');
 		$is_inventory = $this->input->post('is_inventory');
 		$manufacturing_order_id = $this->input->post('manufacturing_order_id');
@@ -3142,6 +3142,15 @@ class Manufacturing extends AdminController
 			echo json_encode([
 				'success' => false,
 				'message' => 'Invalid production inventory record!'
+			], JSON_PRETTY_PRINT);
+			exit;
+		}
+
+		if ($qty_received < 0 || $qty_lost < 0) {
+			header('Content-Type: application/json');
+			echo json_encode([
+				'success' => false,
+				'message' => 'Quantities cannot be negative.'
 			], JSON_PRETTY_PRINT);
 			exit;
 		}
@@ -3201,10 +3210,12 @@ class Manufacturing extends AdminController
 		$qty_assigned = (float) $inventory['qty_assigned'];
 		$new_pending = max(0, $current_pending - ($qty_received + $qty_lost));
 		$status = ($new_pending == 0) ? 'completed' : 'in_progress';
+		$qty_received_sql = sprintf('%.4F', $qty_received);
+		$qty_lost_sql = sprintf('%.4F', $qty_lost);
 
 		// Use set() for updating
-		$this->db->set('qty_received', 'qty_received + ' . $qty_received, FALSE);
-		$this->db->set('qty_lost', 'qty_lost + ' . $qty_lost, FALSE);
+		$this->db->set('qty_received', 'qty_received + ' . $qty_received_sql, FALSE);
+		$this->db->set('qty_lost', 'qty_lost + ' . $qty_lost_sql, FALSE);
 		$this->db->set('qty_assigned', $qty_assigned);
 		$this->db->set('qty_pending', $new_pending);
 		$this->db->set('status', $status);
@@ -3227,6 +3238,9 @@ class Manufacturing extends AdminController
 				'created_at'    => date('Y-m-d H:i:s'),
 				'updated_at'    => date('Y-m-d H:i:s')
 			];
+			if ($this->db->field_exists('movement_type', 'tblmrp_bom_production_inventory_logs')) {
+				$logs['movement_type'] = 'receive';
+			}
 			$this->db->insert('tblmrp_bom_production_inventory_logs', $logs);
 
 			// if($is_inventory){
@@ -3355,6 +3369,233 @@ class Manufacturing extends AdminController
 		echo json_encode($response, JSON_PRETTY_PRINT);
 		exit;
 	}
+
+	public function recover_lost_modal()
+	{
+		$this->production_receive_access_denied();
+		$data['bom_production_inventory_id'] = (int) $this->input->post('bom_production_inventory_id');
+		$this->load->view('manufacturing_orders/production/recover_lost_modal', $data);
+	}
+
+	public function recover_lost_quantity()
+	{
+		$this->production_receive_access_denied();
+		$inventory = $this->production_assignment_or_fail((int) $this->input->post('bom_production_inventory_id'));
+		$comments = trim(strip_tags((string) $this->input->post('comments')));
+		if ($comments === '') {
+			$this->production_json_exit(false, 'A comment is required so the invoice batch explains this recovery.');
+		}
+
+		list($ok, $message) = $this->production_convert_balance($inventory, 'qty_lost', $this->input->post('qty_recovered'), 'recover_lost', $comments);
+		if (!$ok) {
+			$this->production_json_exit(false, $message);
+		}
+
+		$qty = round((float) $this->input->post('qty_recovered'), 2);
+		$invoice_total = $qty * ((float) $inventory['price'] + (float) $inventory['deduct_price']);
+		$this->production_json_exit(true, 'Lost quantity recovered. Make an invoice for this batch. The new invoice total is ' . number_format($invoice_total, 2, '.', '') . '. The original invoice is unchanged.', [
+			'is_inventory' => (float) $inventory['is_inventory'],
+			'qty_received' => $qty,
+		]);
+	}
+
+	private function production_json_exit($success, $message, $extra = [])
+	{
+		header('Content-Type: application/json');
+		echo json_encode(array_merge([
+			'success' => (bool) $success,
+			'message' => $message,
+		], $extra));
+		exit;
+	}
+
+	private function production_receive_access_denied()
+	{
+		if (!is_staff_logged_in() || (!has_permission('manufacturing', '', 'view') && !has_permission('manufacturing', '', 'view_packing') && !is_admin())) {
+			$this->production_json_exit(false, 'Access denied.');
+		}
+	}
+
+	private function production_assignment_or_fail($bom_production_inventory_id)
+	{
+		if ($bom_production_inventory_id <= 0) {
+			$this->production_json_exit(false, 'Invalid production inventory record!');
+		}
+
+		$inventory = $this->db->where('id', $bom_production_inventory_id)->get('tblmrp_bom_production_inventory')->row_array();
+		if (!$inventory) {
+			$this->production_json_exit(false, 'Production inventory record not found!');
+		}
+
+		return $inventory;
+	}
+
+	private function production_order_is_cancelled($manufacturing_order_id)
+	{
+		$mo = $this->db->select('status')->where('id', (int) $manufacturing_order_id)->get(db_prefix() . 'mrp_manufacturing_orders')->row();
+
+		return $mo && $mo->status === 'cancelled';
+	}
+
+	/**
+	 * Move lost quantity into a new received batch.
+	 * The original invoice is not changed.
+	 *
+	 * @return array{0:bool,1:string}
+	 */
+	private function production_convert_balance(array $inventory, $from_field, $qty, $movement_type, $comments)
+	{
+		if ($from_field !== 'qty_lost' || $movement_type !== 'recover_lost') {
+			return [false, 'Invalid balance.'];
+		}
+		if (!$this->db->field_exists('movement_type', 'tblmrp_bom_production_inventory_logs')) {
+			return [false, 'Database upgrade is required before this action can be saved.'];
+		}
+
+		$qty = round((float) $qty, 2);
+		$available = round((float) ($inventory[$from_field] ?? 0), 2);
+		if ($qty <= 0) {
+			return [false, 'Quantity must be greater than zero.'];
+		}
+		if ($qty > $available) {
+			return [false, 'Quantity exceeds the available balance (' . $available . ').'];
+		}
+		if ($this->production_order_is_cancelled($inventory['manufacturing_order_id'])) {
+			return [false, 'This manufacturing order is cancelled.'];
+		}
+
+		$id = (int) $inventory['id'];
+		$pending = (float) $inventory['qty_pending'];
+		$new_from = round($available - $qty, 2);
+		$status = ((float) $pending <= 0) ? 'completed' : 'in_progress';
+		$qty_sql = sprintf('%.4F', $qty);
+		$now = date('Y-m-d H:i:s');
+
+		$recent = $this->db->select('id')
+			->from('tblmrp_bom_production_inventory_logs')
+			->where('bom_production_inventory_id', $id)
+			->where('qty_received', $qty)
+			->where('movement_type', $movement_type)
+			->where('created_at >=', date('Y-m-d H:i:s', time() - 15))
+			->limit(1)
+			->get()
+			->row();
+		if ($recent) {
+			return [false, 'This quantity was just recorded. Refresh the page to avoid a duplicate.'];
+		}
+
+		$this->db->trans_begin();
+		$this->db->set('qty_received', 'qty_received + ' . $qty_sql, false);
+		$this->db->set($from_field, $from_field . ' - ' . $qty_sql, false);
+		$this->db->set('status', $status);
+		$this->db->set('updated_at', $now);
+		$this->db->where('id', $id);
+		$this->db->where($from_field . ' >=', $qty);
+		$this->db->update('tblmrp_bom_production_inventory');
+
+		$saved = $this->db->select($from_field)->where('id', $id)->get('tblmrp_bom_production_inventory')->row_array();
+		if (!$saved || abs((float) $saved[$from_field] - $new_from) > 0.001) {
+			$this->db->trans_rollback();
+			return [false, 'The balance changed. Refresh and try again.'];
+		}
+
+		$this->db->insert('tblmrp_bom_production_inventory_logs', [
+			'bom_production_inventory_id' => $id,
+			'qty_assigned' => $inventory['qty_assigned'],
+			'qty_pending' => $pending,
+			'qty_received' => $qty,
+			'qty_lost' => 0,
+			'movement_type' => $movement_type,
+			'status' => $status,
+			'comments' => $comments,
+			'created_at' => $now,
+			'updated_at' => $now,
+		]);
+		$this->production_apply_received_stock($inventory, $qty, $inventory['product_name'], $comments);
+
+		if ($this->db->trans_status() === false) {
+			$this->db->trans_rollback();
+			return [false, 'Could not save this quantity.'];
+		}
+
+		$this->db->trans_commit();
+
+		return [true, ''];
+	}
+
+	private function production_apply_received_stock($inventory, $qty, $product_name, $comments)
+	{
+		$qty = (float) $qty;
+		if (empty($inventory['is_inventory']) || $qty <= 0) {
+			return;
+		}
+
+		$bom_production_inventory_id = (int) $inventory['id'];
+		$manufacturing_order_id = (int) $inventory['manufacturing_order_id'];
+		$now = date('Y-m-d H:i:s');
+		$qty_sql = sprintf('%.4F', $qty);
+
+		if ($manufacturing_order_id > 147) {
+			$details = $this->db->where('bom_production_inventory_id', $bom_production_inventory_id)->get('tblmrp_bom_production_inventory_details')->result();
+			foreach ($details as $bom_detail) {
+				$raw = $this->db->where('id', $bom_detail->bom_inventory_id)->get('tblmrp_bom_inventory')->row();
+				$product_name_raw = $raw ? $raw->product_name : $product_name;
+				$exists = $this->db
+					->where('bom_production_inventory_id', $bom_production_inventory_id)
+					->where('bom_production_inventory_detail_id', $bom_detail->id)
+					->get('tblmrp_bom_inventory')
+					->num_rows();
+				if ($exists) {
+					$this->db->set('quantity_total', 'quantity_total + ' . $qty_sql, false);
+					$this->db->set('quantity_remaining', 'quantity_remaining + ' . $qty_sql, false);
+					$this->db->set('updated_at', $now);
+					$this->db->where('bom_production_inventory_id', $bom_production_inventory_id);
+					$this->db->where('bom_production_inventory_detail_id', $bom_detail->id);
+					$this->db->update('tblmrp_bom_inventory');
+				} else {
+					$this->db->insert('tblmrp_bom_inventory', [
+						'manufacturing_order_id' => $manufacturing_order_id,
+						'type' => 'new_raw_material',
+						'bom_production_inventory_id' => $bom_production_inventory_id,
+						'bom_production_inventory_detail_id' => $bom_detail->id,
+						'product_name' => $product_name_raw . ' / ' . $product_name,
+						'quantity_total' => $qty,
+						'quantity_remaining' => $qty,
+						'per_quantity_consumption' => 1,
+						'unit_id' => 3,
+						'created_at' => $now,
+						'updated_at' => $now,
+					]);
+				}
+			}
+
+			return;
+		}
+
+		$exists = $this->db->where('bom_production_inventory_id', $bom_production_inventory_id)->get('tblmrp_bom_inventory')->num_rows();
+		if ($exists) {
+			$this->db->set('quantity_total', 'quantity_total + ' . $qty_sql, false);
+			$this->db->set('quantity_remaining', 'quantity_remaining + ' . $qty_sql, false);
+			$this->db->set('updated_at', $now);
+			$this->db->where('bom_production_inventory_id', $bom_production_inventory_id);
+			$this->db->update('tblmrp_bom_inventory');
+
+			return;
+		}
+
+		$this->db->insert('tblmrp_bom_inventory', [
+			'manufacturing_order_id' => $manufacturing_order_id,
+			'type' => 'new_raw_material',
+			'bom_production_inventory_id' => $bom_production_inventory_id,
+			'product_name' => $product_name . ' - ' . $comments,
+			'quantity_total' => $qty,
+			'quantity_remaining' => $qty,
+			'per_quantity_consumption' => 1,
+			'unit_id' => 3,
+			'created_at' => $now,
+			'updated_at' => $now,
+		]);
+	}
 	
 	public function edit_production_modal()
 	{
@@ -3399,7 +3640,7 @@ class Manufacturing extends AdminController
 
 		$bom_production_details = $this->db->where('bom_production_inventory_id', $this->input->post("id"))->get('tblmrp_bom_production_inventory_details')->result();
 
-		if($bom_production->qty_received > 0) {
+		if($bom_production->qty_received > 0 || (float) $bom_production->qty_lost > 0) {
 			$response = [
 				'success' => false,
 				'message' => 'invalid Request.'

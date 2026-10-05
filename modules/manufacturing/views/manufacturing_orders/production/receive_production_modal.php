@@ -85,7 +85,18 @@
 													<td><?php echo htmlspecialchars($log['qty_lost']); ?></td>
 													<td><?php echo htmlspecialchars($log['qty_pending']); ?></td>
 													<td><?php echo htmlspecialchars(ucfirst(str_replace('_', ' ', $log['status']))); ?></td>
-													<td><?php echo htmlspecialchars($log['comments']); ?></td>
+													<td>
+														<?php
+															$movement = $log['movement_type'] ?? 'receive';
+															$movement_labels = [
+																'recover_lost' => 'Recovered lost',
+															];
+															if (isset($movement_labels[$movement])) {
+																echo '<span class="label label-info">' . $movement_labels[$movement] . '</span> ';
+															}
+															echo htmlspecialchars($log['comments']);
+														?>
+													</td>
 													<td>
 														<?php if ($can_make_invoice && (float) $log['qty_received'] > 0): ?>
 															<?php
@@ -105,7 +116,9 @@
 																	'description' => $production_inventory['comments'],
 																	'qty_assigned' => $production_inventory['qty_assigned'],
 																	'qty_received' => $log['qty_received'],
-																	'qty_lost' => $log['qty_lost'],
+																	'qty_lost' => (($log['movement_type'] ?? '') === 'recover_lost') ? 0 : $log['qty_lost'],
+																	'movement_type' => $log['movement_type'] ?? 'receive',
+																	'batch_comment' => $log['comments'],
 																	'qty_pending' => $production_inventory['qty_pending'],
 																	'price' => $production_inventory['price'],
 																	'deduct_price' => $production_inventory['deduct_price'],
