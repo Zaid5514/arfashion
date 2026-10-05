@@ -29,5 +29,8 @@ error_log
 
 /install123/
 
-# Ignore Windows reserved device name
-nul
+# Local KPI module notes (not for repo)
+modules/kpi_management/KPI_RECONCILE_GUIDE.txt
+
+# Agents
+.agents/*
